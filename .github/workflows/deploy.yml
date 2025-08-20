@@ -2,10 +2,6 @@ name: deploy
 on:
   workflow_call:
   workflow_dispatch:
-
-permissions:
-  contents: write
-
 jobs:
   release:
     concurrency:
@@ -49,8 +45,8 @@ jobs:
           npm install
           npx semantic-release
         env:
-          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
-          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
           GH_TOKEN: ${{ secrets.GH_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           RELEASE_DRY_RUN: ${{ contains(github.repository, 'template') }}
