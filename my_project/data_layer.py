@@ -42,3 +42,32 @@ class DatabaseManager:
             )""")
         conn.commit()
         conn.close()
+
+    def _validate_expense(self, title, price, date, category):  # VALIDATION METHODS
+        if not all([title, price, date, category]):
+            return "All fields required"
+        try:
+            float(price)
+        except Exception:
+            return "Invalid price"
+        try:
+            datetime.strptime(date, "%Y-%m-%d")
+        except Exception:
+            return "Invalid date format (YYYY-MM-DD required)"
+        return None
+
+    def _validate_contact(self, name):
+        if not name:
+            return "Contact name required"
+        return None
+
+    def _validate_transaction(self, contact_id, type_, amount, date):
+        if type_ not in ("debit", "credit"):
+            return "Invalid type (debit/credit)"
+        if amount <= 0:
+            return "Amount must be positive"
+        try:
+            datetime.strptime(date, "%Y-%m-%d")
+        except Exception:
+            return "Invalid date format (YYYY-MM-DD required)"
+        return None
