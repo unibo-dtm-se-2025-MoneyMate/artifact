@@ -4,7 +4,7 @@ A simple template of a Python project, with a rigid file structure, and predispo
 
 ## Relevant features
 
-- All your project code into a single main package (`my_project/`)
+- All your project code into a single main package (`MoneyMate/`)
 - All your project tests into a single test package (`test/`)
 - Unit testing support via [`unittest`](https://docs.python.org/3/library/unittest.html)
 - Automatic testing on all branches via GitHub Actions
@@ -22,7 +22,7 @@ A simple template of a Python project, with a rigid file structure, and predispo
 Overview:
 ```bash
 <root directory>
-├── my_project/             # main package (should be named after your project)
+├── MoneyMate/             # main package (should be named after your project)
 │   ├── __init__.py         # python package marker
 │   └── __main__.py         # application entry point
 ├── test/                   # test package (should contain unit tests)
@@ -42,19 +42,19 @@ Overview:
 
 ## TODO-list for template usage
 
-1. Use this template to create a new GitHub repository, say `my_project`
+1. Use this template to create a new GitHub repository, say `MoneyMate`
     - this name will also be used to identify the package on PyPi
         + so, we suggest choosing a name which has not been used on PyPi, yet
         + we also suggest choosing a name which is a valid Python package name (i.e. `using_snake_case`)
 
-2. Clone the `my_project` repository
+2. Clone the `MoneyMate` repository
 
-3. Open a shell into your local `my_project` directory and run 
+3. Open a shell into your local `MoneyMate` directory and run 
     ```bash
-    ./rename-template.sh my_project
+    ./rename-template.sh MoneyMate
     ``` 
     
-    This will coherently rename the template's project name with the one chosen by you (i.e. `my_project`, in this example)
+    This will coherently rename the template's project name with the one chosen by you (i.e. `MoneyMate`, in this example)
 
 4. Commit & push
 
@@ -80,15 +80,15 @@ Overview:
     - cf. <https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic>
     - the token must allow pushing to the repository
 
-13. Put your main (resp. test) code in `my_project/` (resp. `test/`)
+13. Put your main (resp. test) code in `MoneyMate/` (resp. `test/`)
 
 ## How to do stuff
 
 ### Run your code as an application
 
-This will execute the file `my_project/__main__.py`:
+This will execute the file `MoneyMate/__main__.py`:
 ```bash
-python -m my_project 
+python -m MoneyMate 
 ```
 
 ### Run unit tests
@@ -110,7 +110,7 @@ pip install -r requirements-dev.txt
 
 > This paragraph is more understandable if the reader has some background about [GitFlow](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow)
 
-GitHub actions automatically release a new version of `my_project` on PyPi whenever commits are pushed on either the `main`/`master` or `develop` branches, as well as when new tags are pushed.
+GitHub actions automatically release a new version of `MoneyMate` on PyPi whenever commits are pushed on either the `main`/`master` or `develop` branches, as well as when new tags are pushed.
 
 Tags are assumed to consist of [semantic versioning](https://semver.org/) strings of the form `Major.Minor.Patch` where `Major`, `Minor`, and `Patch` are non-negative integers.
 

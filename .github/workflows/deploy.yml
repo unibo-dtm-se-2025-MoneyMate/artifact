@@ -30,7 +30,7 @@ jobs:
         run: pip install -r requirements-dev.txt
 
       - name: Change default logging level
-        run: sed -i -e 's/DEBUG/WARN/g' my_project/__init__.py
+        run: sed -i -e 's/DEBUG/WARN/g' MoneyMate/__init__.py
 
       - name: Get Node Version
         id: get-node-version
