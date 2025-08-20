@@ -2,6 +2,10 @@ name: deploy
 on:
   workflow_call:
   workflow_dispatch:
+
+permissions:
+  contents: write
+
 jobs:
   release:
     concurrency:
@@ -47,5 +51,6 @@ jobs:
         env:
           TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
           TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
-          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
           RELEASE_DRY_RUN: ${{ contains(github.repository, 'template') }}
