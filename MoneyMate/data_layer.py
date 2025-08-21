@@ -43,7 +43,10 @@ class DatabaseManager:
         conn.commit()
         conn.close()
 
-    def _validate_expense(self, title, price, date, category):  # VALIDATION METHODS
+
+      # --- VALIDATION METHODS ---  
+
+    def _validate_expense(self, title, price, date, category):  
         if not all([title, price, date, category]):
             return "All fields required"
         try:
@@ -71,3 +74,71 @@ class DatabaseManager:
         except Exception:
             return "Invalid date format (YYYY-MM-DD required)"
         return None
+    
+
+        # --- CRUD EXPENSES ---
+
+    def add_expense(self, title, price, date, category):
+        err = self._validate_expense(title, price, date, category)
+        if err:
+            return dict_response(False, err)
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO expenses (title, price, date, category) VALUES (?, ?, ?, ?)",
+                (title, price, date, category)
+            )
+            conn.commit()
+            conn.close()
+            return dict_response(True)
+        except Exception as e:
+            return dict_response(False, str(e))
+
+    def get_expenses(self):
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM expenses")
+            data = cursor.fetchall()   #take all the results using fetchall()
+            conn.close()
+            return dict_response(True, data=data)
+        except Exception as e:
+            return dict_response(False, str(e))
+
+    def search_expenses(self, query):
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            # Cerca title o category
+            cursor.execute(
+                "SELECT * FROM expenses WHERE title LIKE ? OR category LIKE ?",
+                (f"%{query}%", f"%{query}%") #search using STR
+            )
+            data = cursor.fetchall()
+            conn.close()
+            return dict_response(True, data=data)
+        except Exception as e:
+            return dict_response(False, str(e))
+
+    def delete_expense(self, expense_id):
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+            conn.commit()
+            conn.close()
+            return dict_response(True)
+        except Exception as e:
+            return dict_response(False, str(e))
+
+    def clear_expenses(self):
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM expenses")
+            conn.commit()
+            conn.close()
+            return dict_response(True)
+        except Exception as e:
+            return dict_response(False, str(e))
