@@ -145,7 +145,7 @@ class DatabaseManager:
         
         
         # --- CRUD CONTACTS ---
-        
+
     def add_contact(self, name):
         err = self._validate_contact(name)
         if err:
@@ -181,3 +181,72 @@ class DatabaseManager:
             return dict_response(True)
         except Exception as e:
             return dict_response(False, str(e))
+        
+
+        # --- CRUD TRANSACTIONS ---
+
+    def add_transaction(self, contact_id, type_, amount, date, description=""):
+        """
+        Adds a new transaction for the specified contact.
+        Validates the input before inserting the transaction into the database.
+        Returns a standardized response indicating success or failure.
+        """
+        err = self._validate_transaction(contact_id, type_, amount, date)
+        if err:
+            return dict_response(False, err)
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO transactions (contact_id, type, amount, date, description) VALUES (?, ?, ?, ?, ?)",
+                (contact_id, type_, amount, date, description)
+            )
+            conn.commit()
+            conn.close()
+            return dict_response(True)
+        
+        except Exception as e:
+            error_msg = f"Error adding transaction for contact ID {contact_id}: {str(e)}"
+            print(error_msg)
+            return dict_response(False, error_msg)
+
+    def get_transactions(self, contact_id=None):
+        """
+        Retrieves transactions from the database.
+        If a contact_id is specified, only transactions for that contact are returned.
+        Otherwise, all transactions are returned.
+        Returns a standardized response with the transaction data or an error message.
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            if contact_id:
+                cursor.execute("SELECT * FROM transactions WHERE contact_id = ?", (contact_id,))
+            else:
+                cursor.execute("SELECT * FROM transactions")
+            data = cursor.fetchall()
+            conn.close()
+            return dict_response(True, data=data)
+        
+        except Exception as e:
+            error_msg = f"Error retrieving transactions: {str(e)}"
+            print(error_msg)
+            return dict_response(False, error_msg)
+
+    def delete_transaction(self, transaction_id):
+        """
+        Deletes a transaction from the database using its transaction ID.
+        Returns a standardized response indicating success or failure.
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM transactions WHERE id = ?", (transaction_id,))
+            conn.commit()
+            conn.close()
+            return dict_response(True)
+        
+        except Exception as e:
+            error_msg = f"Error deleting transaction with ID {transaction_id}: {str(e)}"
+            print(error_msg)
+            return dict_response(False, error_msg)
