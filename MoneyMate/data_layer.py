@@ -250,3 +250,53 @@ class DatabaseManager:
             error_msg = f"Error deleting transaction with ID {transaction_id}: {str(e)}"
             print(error_msg)
             return dict_response(False, error_msg)
+        
+        
+    def get_contact_balance(self, contact_id): # for a SPECIFIC contact
+        """
+        Calculates the balance for a specific contact by summing all 'credit' and 'debit' transactions.
+        Also returns total credits and debits separately for more detailed reporting.
+        """
+        CREDIT = "credit"
+        DEBIT = "debit"
+
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            # Retrieve the sum of amounts for each transaction type for the given contact
+            cursor.execute(
+                "SELECT type, SUM(amount) FROM transactions WHERE contact_id = ? GROUP BY type",
+                (contact_id,)
+            )
+            results = cursor.fetchall()
+            conn.close()
+
+            total_credit = 0
+            total_debit = 0
+
+            # Process each transaction type; log any unknown types for debugging
+            for transaction_type, total_amount in results:
+                if transaction_type == CREDIT:
+                    total_credit += total_amount
+                elif transaction_type == DEBIT:
+                    total_debit += total_amount
+                else:
+                    # Log a warning for any unknown transaction type (could be extended for future types)
+                    print(f"Warning: Unknown transaction type '{transaction_type}' for contact ID {contact_id}")
+
+            balance = total_credit - total_debit
+
+            # Return a detailed response including balance, total credits, and total debits
+            return dict_response(
+                True,
+                data={
+                    "balance": balance,
+                    "total_credit": total_credit,
+                    "total_debit": total_debit
+                }
+            )
+        except Exception as e:
+            # Provide a more descriptive error message and log it for debugging
+            error_msg = f"Error calculating balance for contact ID {contact_id}: {str(e)}"
+            print(error_msg)
+            return dict_response(False, error_msg)
