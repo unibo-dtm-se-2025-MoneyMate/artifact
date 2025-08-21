@@ -20,7 +20,9 @@ def db():
         os.remove(TEST_DB)
 
 def test_tables_exist(db):
-    tables = db.list_tables()["data"]  # <-- accedi alla chiave "data"
+    tables = db.list_tables()["data"]  # <-- to access the key "data"
+    # Remove SQLite system table if present
+    tables = [t for t in tables if t != "sqlite_sequence"]
     assert set(tables) == {"expenses", "contacts", "transactions"}
 
 def test_add_expense_valid(db):
