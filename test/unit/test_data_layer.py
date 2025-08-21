@@ -20,7 +20,7 @@ def db():
         os.remove(TEST_DB)
 
 def test_tables_exist(db):
-    tables = db.list_tables()
+    tables = db.list_tables()["data"]  # <-- accedi alla chiave "data"
     assert set(tables) == {"expenses", "contacts", "transactions"}
 
 def test_add_expense_valid(db):
