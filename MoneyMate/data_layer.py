@@ -142,3 +142,42 @@ class DatabaseManager:
             return dict_response(True)
         except Exception as e:
             return dict_response(False, str(e))
+        
+        
+        # --- CRUD CONTACTS ---
+        
+    def add_contact(self, name):
+        err = self._validate_contact(name)
+        if err:
+            return dict_response(False, err)
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("INSERT INTO contacts (name) VALUES (?)", (name,))
+            conn.commit()
+            conn.close()
+            return dict_response(True)
+        except Exception as e:
+            return dict_response(False, str(e))
+
+    def get_contacts(self):
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("SELECT * FROM contacts")
+            data = cursor.fetchall()
+            conn.close()
+            return dict_response(True, data=data)
+        except Exception as e:
+            return dict_response(False, str(e))
+
+    def delete_contact(self, contact_id):
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            cursor.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
+            conn.commit()
+            conn.close()
+            return dict_response(True)
+        except Exception as e:
+            return dict_response(False, str(e))
