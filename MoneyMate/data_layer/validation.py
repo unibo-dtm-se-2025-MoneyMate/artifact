@@ -1,97 +1,47 @@
-from .database import get_connection
-from .validation import validate_expense
+from datetime import datetime
 
-def dict_response(success, error=None, data=None):
-    """Return a standardized dictionary for all API responses."""
-    return {"success": success, "error": error, "data": data}
-
-# --- CRUD EXPENSES ---
-def add_expense(title, price, date, category):
+# --- VALIDATION METHODS ---
+def validate_expense(title, price, date, category):
     """
-    Adds a new expense after validation.
+    Validates expense fields: title, price, date, category.
+    Returns an error string if something is wrong, otherwise None.
     """
-    err = validate_expense(title, price, date, category)
-    if err:
-        return dict_response(False, err)
+    # Check if title is missing with specific error
+    if not title:
+        return "Missing title"
+    if not all([price, date, category]):
+        return "All fields required"
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute(
-            "INSERT INTO expenses (title, price, date, category) VALUES (?, ?, ?, ?)",
-            (title, price, date, category)
-        )
-        conn.commit()
-        conn.close()
-        return dict_response(True)
-    except Exception as e:
-        return dict_response(False, str(e))
-
-def get_expenses():
-    """
-    Returns all expenses as a list of dicts.
-    """
+        price_val = float(price)
+        if price_val <= 0:
+            return "Price must be positive"
+    except Exception:
+        return "Invalid price"
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("SELECT id, title, price, date, category FROM expenses")
-        rows = cursor.fetchall()  # take all the results using fetchall()
-        conn.close()
-        # Convert to list of dicts, not tuples
-        expenses = [
-            {"id": r[0], "title": r[1], "price": r[2], "date": r[3], "category": r[4]}
-            for r in rows
-        ]
-        return dict_response(True, data=expenses)
-    except Exception as e:
-        return dict_response(False, str(e))
+        datetime.strptime(date, "%Y-%m-%d")
+    except Exception:
+        return "Invalid date format (YYYY-MM-DD required)"
+    return None
 
-def search_expenses(query):
+def validate_contact(name):
     """
-    Searches expenses by title or category.
+    Validates contact name. Returns error string if invalid, otherwise None.
     """
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        # Search by title or category
-        cursor.execute(
-            "SELECT id, title, price, date, category FROM expenses WHERE title LIKE ? OR category LIKE ?",
-            (f"%{query}%", f"%{query}%")
-        )
-        rows = cursor.fetchall()
-        conn.close()
-        # Convert to list of dicts, not tuples
-        expenses = [
-            {"id": r[0], "title": r[1], "price": r[2], "date": r[3], "category": r[4]}
-            for r in rows
-        ]
-        return dict_response(True, data=expenses)
-    except Exception as e:
-        return dict_response(False, str(e))
+    if not name:
+        return "Contact name required"
+    return None
 
-def delete_expense(expense_id):
+def validate_transaction(type_, amount, date):
     """
-    Deletes a specific expense by ID.
+    Validates transaction fields: type, amount, date.
+    Returns error string if invalid, otherwise None.
     """
+    if type_ not in ("debit", "credit"):
+        return "Invalid type (debit/credit)"
+    if amount <= 0:
+        return "Amount must be positive"
     try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
-        conn.commit()
-        conn.close()
-        return dict_response(True)
-    except Exception as e:
-        return dict_response(False, str(e))
-
-def clear_expenses():
-    """
-    Deletes all expenses from the table.
-    """
-    try:
-        conn = get_connection()
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM expenses")
-        conn.commit()
-        conn.close()
-        return dict_response(True)
-    except Exception as e:
-        return dict_response(False, str(e))
+        datetime.strptime(date, "%Y-%m-%d")
+    except Exception:
+        return "Invalid date format (YYYY-MM-DD required)"
+    return None
