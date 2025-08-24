@@ -2,7 +2,8 @@ import os
 from MoneyMate.data_layer.api import (
     api_list_tables, api_add_expense, api_get_expenses,
     api_add_contact, api_get_contacts, api_add_transaction,
-    api_get_transactions, api_get_contact_balance
+    api_get_transactions, api_get_contact_balance,
+    set_db_path  # new function for the database path
 )
 from MoneyMate.data_layer.manager import DatabaseManager
 
@@ -13,6 +14,7 @@ def setup_module(module):
     if os.path.exists(TEST_DB):
         os.remove(TEST_DB)
     DatabaseManager(TEST_DB)  # Initialize DB schema
+    set_db_path(TEST_DB)      # Imposta il database usato dalle API
 
 def teardown_module(module):
     # Remove the test database after all tests have run.
