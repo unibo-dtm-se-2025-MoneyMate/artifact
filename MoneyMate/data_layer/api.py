@@ -8,7 +8,7 @@ Each function returns a standardized dictionary response.
 
 """
 
-from data_layer.manager import DatabaseManager
+from MoneyMate.data_layer.manager import DatabaseManager
 
 _db = DatabaseManager()
 
@@ -113,3 +113,12 @@ def api_get_contact_balance(contact_id):
     Returns: dict {success, error, data}
     """
     return _db.transactions.get_contact_balance(contact_id)
+
+# --- Database for testing ---
+def set_db_path(db_path):
+    """
+    Set the database path for the API module.
+    This allows tests or other modules to use a custom database file.
+    """
+    global _db
+    _db = DatabaseManager(db_path)
