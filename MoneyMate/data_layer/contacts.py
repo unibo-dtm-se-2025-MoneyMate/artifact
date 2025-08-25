@@ -23,11 +23,11 @@ class ContactsManager:
         if err:
             return self.dict_response(False, err)
         try:
-            conn = get_connection(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("INSERT INTO contacts (name) VALUES (?)", (name,))
-            conn.commit()
-            conn.close()
+            # Use context manager for safe connection handling
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("INSERT INTO contacts (name) VALUES (?)", (name,))
+                conn.commit()
             return self.dict_response(True)
         except Exception as e:
             return self.dict_response(False, str(e))
@@ -37,11 +37,10 @@ class ContactsManager:
         Returns all contacts as a list of dicts.
         """
         try:
-            conn = get_connection(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("SELECT id, name FROM contacts")
-            rows = cursor.fetchall()
-            conn.close()
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, name FROM contacts")
+                rows = cursor.fetchall()
             # Convert to list of dicts, not tuples
             contacts = [{"id": r[0], "name": r[1]} for r in rows]
             return self.dict_response(True, data=contacts)
@@ -53,11 +52,10 @@ class ContactsManager:
         Deletes a specific contact by ID.
         """
         try:
-            conn = get_connection(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
-            conn.commit()
-            conn.close()
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM contacts WHERE id = ?", (contact_id,))
+                conn.commit()
             return self.dict_response(True)
         except Exception as e:
             return self.dict_response(False, str(e))
@@ -67,9 +65,8 @@ class ContactsManager:
         """
         Returns True if the contact exists, False otherwise.
         """
-        conn = get_connection(self.db_path)
-        cursor = conn.cursor()
-        cursor.execute("SELECT 1 FROM contacts WHERE id = ?", (contact_id,))
-        exists = cursor.fetchone() is not None
-        conn.close()
+        with get_connection(self.db_path) as conn:
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1 FROM contacts WHERE id = ?", (contact_id,))
+            exists = cursor.fetchone() is not None
         return exists
