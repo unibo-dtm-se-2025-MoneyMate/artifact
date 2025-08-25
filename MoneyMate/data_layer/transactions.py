@@ -1,5 +1,9 @@
 from .database import get_connection
 from .validation import validate_transaction
+import logging
+import MoneyMate.data_layer.logging_config  # Assicura la configurazione globale
+
+logger = logging.getLogger(__name__)
 
 class TransactionsManager:
     """
@@ -24,9 +28,11 @@ class TransactionsManager:
         """
         err = validate_transaction(type_, amount, date)
         if err:
+            logger.warning(f"Validation failed for transaction (contact_id={contact_id}, type={type_}, amount={amount}): {err}")
             return self.dict_response(False, err)
         # Check that the contact_id exists (required by test)
         if not self.contacts_manager.contact_exists(contact_id):
+            logger.warning(f"Transaction validation failed: contact_id {contact_id} does not exist.")
             return self.dict_response(False, "Contact does not exist")
         try:
             with get_connection(self.db_path) as conn:
@@ -36,10 +42,11 @@ class TransactionsManager:
                     (contact_id, type_, amount, date, description)
                 )
                 conn.commit()
+            logger.info(f"Transaction for contact_id={contact_id} of type '{type_}' and amount {amount} added successfully.")
             return self.dict_response(True)
         except Exception as e:
             error_msg = f"Error adding transaction for contact ID {contact_id}: {str(e)}"
-            print(error_msg)
+            logger.error(error_msg)
             return self.dict_response(False, error_msg)
 
     def get_transactions(self, contact_id=None):
@@ -68,10 +75,11 @@ class TransactionsManager:
                 }
                 for r in rows
             ]
+            logger.info(f"Retrieved {len(transactions)} transactions from the database (contact_id={contact_id}).")
             return self.dict_response(True, data=transactions)
         except Exception as e:
             error_msg = f"Error retrieving transactions: {str(e)}"
-            print(error_msg)
+            logger.error(error_msg)
             return self.dict_response(False, error_msg)
 
     def delete_transaction(self, transaction_id):
@@ -84,10 +92,11 @@ class TransactionsManager:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM transactions WHERE id = ?", (transaction_id,))
                 conn.commit()
+            logger.info(f"Deleted transaction with ID {transaction_id}.")
             return self.dict_response(True)
         except Exception as e:
             error_msg = f"Error deleting transaction with ID {transaction_id}: {str(e)}"
-            print(error_msg)
+            logger.error(error_msg)
             return self.dict_response(False, error_msg)
 
     def get_contact_balance(self, contact_id):
@@ -116,12 +125,13 @@ class TransactionsManager:
                 elif transaction_type == DEBIT:
                     total_debit += total_amount
                 else:
-                    print(f"Warning: Unknown transaction type '{transaction_type}' for contact ID {contact_id}")
+                    logger.warning(f"Unknown transaction type '{transaction_type}' for contact ID {contact_id}")
 
             balance = total_credit - total_debit
 
+            logger.info(f"Calculated balance for contact ID {contact_id}: {balance} (credit={total_credit}, debit={total_debit})")
             return self.dict_response(True, data=balance)
         except Exception as e:
             error_msg = f"Error calculating balance for contact ID {contact_id}: {str(e)}"
-            print(error_msg)
+            logger.error(error_msg)
             return self.dict_response(False, error_msg)
