@@ -1,5 +1,9 @@
 from .database import get_connection
 from .validation import validate_expense
+import logging
+import MoneyMate.data_layer.logging_config  # Assicura che la configurazione sia sempre attiva
+
+logger = logging.getLogger(__name__)
 
 class ExpensesManager:
     """
@@ -22,9 +26,9 @@ class ExpensesManager:
         """
         err = validate_expense(title, price, date, category)
         if err:
+            logger.warning(f"Validation failed for expense '{title}': {err}")
             return self.dict_response(False, err)
         try:
-            # Use context manager to guarantee connection is closed
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
@@ -32,8 +36,10 @@ class ExpensesManager:
                     (title, price, date, category)
                 )
                 conn.commit()
+            logger.info(f"Expense '{title}' added successfully.")
             return self.dict_response(True)
         except Exception as e:
+            logger.error(f"Error adding expense '{title}': {e}")
             return self.dict_response(False, str(e))
 
     def get_expenses(self):
@@ -46,13 +52,14 @@ class ExpensesManager:
                 cursor = conn.cursor()
                 cursor.execute("SELECT id, title, price, date, category FROM expenses")
                 rows = cursor.fetchall()
-            # Convert to list of dicts, not tuples
             expenses = [
                 {"id": r[0], "title": r[1], "price": r[2], "date": r[3], "category": r[4]}
                 for r in rows
             ]
+            logger.info(f"Retrieved {len(expenses)} expenses from the database.")
             return self.dict_response(True, data=expenses)
         except Exception as e:
+            logger.error(f"Error retrieving expenses: {e}")
             return self.dict_response(False, str(e))
 
     def search_expenses(self, query):
@@ -72,8 +79,10 @@ class ExpensesManager:
                 {"id": r[0], "title": r[1], "price": r[2], "date": r[3], "category": r[4]}
                 for r in rows
             ]
+            logger.info(f"Searched expenses with query '{query}': found {len(expenses)} results.")
             return self.dict_response(True, data=expenses)
         except Exception as e:
+            logger.error(f"Error searching expenses with query '{query}': {e}")
             return self.dict_response(False, str(e))
 
     def delete_expense(self, expense_id):
@@ -86,8 +95,10 @@ class ExpensesManager:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
                 conn.commit()
+            logger.info(f"Deleted expense with ID {expense_id}.")
             return self.dict_response(True)
         except Exception as e:
+            logger.error(f"Error deleting expense with ID {expense_id}: {e}")
             return self.dict_response(False, str(e))
 
     def clear_expenses(self):
@@ -100,6 +111,8 @@ class ExpensesManager:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM expenses")
                 conn.commit()
+            logger.info("Cleared all expenses from the database.")
             return self.dict_response(True)
         except Exception as e:
+            logger.error(f"Error clearing expenses: {e}")
             return self.dict_response(False, str(e))
