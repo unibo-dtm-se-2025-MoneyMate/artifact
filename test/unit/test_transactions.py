@@ -1,5 +1,6 @@
 import sys
 import os
+import gc
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 import pytest
 from MoneyMate.data_layer.manager import DatabaseManager
@@ -13,9 +14,10 @@ def db():
         os.remove(TEST_DB)
     dbm = DatabaseManager(TEST_DB)
     yield dbm
-    # Teardown: remove the test database after tests
+    # Teardown: release all managers and remove the test database
     if hasattr(dbm, "close"):
         dbm.close()
+    gc.collect()
     if os.path.exists(TEST_DB):
         os.remove(TEST_DB)
 
