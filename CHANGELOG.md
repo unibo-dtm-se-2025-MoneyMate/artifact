@@ -1,3 +1,23 @@
+## [1.0.1](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact/compare/1.0.0...1.0.1) (2025-08-25)
+
+
+### Bug Fixes
+
+* **CI:** add pytest to requirements-dev.txt for CI tests ([6c5733c](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact/commit/6c5733c0f7470a6757d401501d3ae6fc8d344c06))
+* Update PyPI authentication; now using API token for Twine authentication via PYPI_TOKEN secret. ([e48e2a3](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact/commit/e48e2a35340f67f8b2f10aa9768f5d305bc92406))
+
+
+### Tests
+
+* update test references from my_project to MoneyMate ([8ca4af6](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact/commit/8ca4af683ff9bd1c3f1a6059ad96310ccd3dd004))
+
+
+### General maintenance
+
+* rename project from my_project to MoneyMate ([4aa449a](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact/commit/4aa449a524e546d0a07b4a11dc5562ea03bb8f11))
+* rename project from my_project to MoneyMate ([e46639b](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact/commit/e46639b20776ac05931a5e3738f9f607049ad2ea))
+* update Python version to 3.11.9 in .python-version ([86f2e50](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact/commit/86f2e50b5ecd53f227b6e020b93c3753da8c5667))
+
 ## 1.0.0 (2025-08-20)
 
 
