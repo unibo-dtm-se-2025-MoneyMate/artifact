@@ -26,6 +26,18 @@ def set_db_path(db_path):
     global _db
     _db = DatabaseManager(db_path)
 
+def set_db_path(db_path):
+    """
+    Set the database path for the API module.
+    This allows tests or other modules to use a custom database file.
+    If db_path is None, releases the global _db reference for proper cleanup.
+    """
+    global _db
+    if db_path is None:
+        _db = None
+    else:
+        _db = DatabaseManager(db_path)
+
 
 # --- UTILITY ---
 
