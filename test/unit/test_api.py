@@ -1,4 +1,5 @@
 import os
+import gc
 from MoneyMate.data_layer.api import (
     api_list_tables, api_add_expense, api_get_expenses,
     api_add_contact, api_get_contacts, api_add_transaction,
@@ -18,6 +19,9 @@ def setup_module(module):
 
 def teardown_module(module):
     # Remove the test database after all tests have run.
+    # Release API global DB reference to ensure file is not locked
+    set_db_path(None)
+    gc.collect()
     if os.path.exists(TEST_DB):
         os.remove(TEST_DB)
 
@@ -47,4 +51,3 @@ def test_api_add_transaction_and_balance():
     # This tests the transaction API and balance calculation logic.
     assert saldo["success"]
     assert saldo["data"] == 30
-    
