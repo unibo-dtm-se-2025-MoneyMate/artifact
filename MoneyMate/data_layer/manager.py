@@ -37,6 +37,16 @@ class DatabaseManager:
         self.contacts = ContactsManager(db_path)
         self.transactions = TransactionsManager(db_path, self.contacts)
 
+    def _create_managers(self, db_path):
+        """
+        Private method that creates and re-instantiates all entity managers
+        with the new database path.
+        This is used when changing the database path at runtime.
+        """
+        self.expenses = ExpensesManager(db_path)
+        self.contacts = ContactsManager(db_path)
+        self.transactions = TransactionsManager(db_path, self.contacts)
+
     def list_tables(self):
         """
         List all tables in the database.
