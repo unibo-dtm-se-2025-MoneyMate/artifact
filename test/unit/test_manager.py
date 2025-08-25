@@ -1,4 +1,5 @@
 import os
+import gc
 from MoneyMate.data_layer.manager import DatabaseManager
 
 TEST_DB = "test_manager.db"
@@ -10,6 +11,7 @@ def setup_module(module):
 
 def teardown_module(module):
     # Remove the test database after all tests have run.
+    gc.collect()  # Force garbage collection to close any lingering SQLite handles
     if os.path.exists(TEST_DB):
         os.remove(TEST_DB)
 
