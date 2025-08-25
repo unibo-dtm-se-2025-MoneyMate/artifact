@@ -24,6 +24,10 @@ from .database import DB_PATH, list_tables, init_db
 from .expenses import ExpensesManager
 from .contacts import ContactsManager
 from .transactions import TransactionsManager
+import logging
+import MoneyMate.data_layer.logging_config  # Assicura la configurazione globale
+
+logger = logging.getLogger(__name__)
 
 class DatabaseManager:
     """
@@ -34,12 +38,14 @@ class DatabaseManager:
         """
         Release all entity managers for test cleanup.
         """
+        logger.info("Releasing all managers for test cleanup.")
         self.expenses = None
         self.contacts = None
         self.transactions = None
     
     def __init__(self, db_path=DB_PATH):
         # Initialize the database and managers
+        logger.info(f"Initializing DatabaseManager with db_path: {db_path}")
         init_db(db_path)
         self.expenses = ExpensesManager(db_path)
         self.contacts = ContactsManager(db_path)
@@ -51,6 +57,7 @@ class DatabaseManager:
         with the new database path.
         This is used when changing the database path at runtime.
         """
+        logger.info(f"Re-creating managers with new db_path: {db_path}")
         self.expenses = ExpensesManager(db_path)
         self.contacts = ContactsManager(db_path)
         self.transactions = TransactionsManager(db_path, self.contacts)
@@ -60,6 +67,7 @@ class DatabaseManager:
         List all tables in the database.
         Useful for testing and diagnostics.
         """
+        logger.info(f"Listing tables for db_path: {self.expenses.db_path}")
         return list_tables(db_path=self.expenses.db_path)
     
 
@@ -67,6 +75,7 @@ class DatabaseManager:
         """
         Set a new database path and re-initialize all managers to use it.
         """
+        logger.info(f"Setting new db_path: {db_path} and re-initializing managers.")
         self.db_path = db_path
         init_db(db_path)
         self._create_managers(db_path)
