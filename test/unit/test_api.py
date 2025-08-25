@@ -47,3 +47,4 @@ def test_api_add_transaction_and_balance():
     # This tests the transaction API and balance calculation logic.
     assert saldo["success"]
     assert saldo["data"] == 30
+    
