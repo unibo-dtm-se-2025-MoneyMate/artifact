@@ -43,3 +43,12 @@ class DatabaseManager:
         Useful for testing and diagnostics.
         """
         return list_tables(db_path=self.expenses.db_path)
+    
+
+    def set_db_path(self, db_path):
+        """
+        Set a new database path and re-initialize all managers to use it.
+        """
+        self.db_path = db_path
+        init_db(db_path)
+        self._create_managers(db_path)
