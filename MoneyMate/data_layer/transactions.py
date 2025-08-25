@@ -29,14 +29,13 @@ class TransactionsManager:
         if not self.contacts_manager.contact_exists(contact_id):
             return self.dict_response(False, "Contact does not exist")
         try:
-            conn = get_connection(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute(
-                "INSERT INTO transactions (contact_id, type, amount, date, description) VALUES (?, ?, ?, ?, ?)",
-                (contact_id, type_, amount, date, description)
-            )
-            conn.commit()
-            conn.close()
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "INSERT INTO transactions (contact_id, type, amount, date, description) VALUES (?, ?, ?, ?, ?)",
+                    (contact_id, type_, amount, date, description)
+                )
+                conn.commit()
             return self.dict_response(True)
         except Exception as e:
             error_msg = f"Error adding transaction for contact ID {contact_id}: {str(e)}"
@@ -51,15 +50,13 @@ class TransactionsManager:
         Returns a standardized response with the transaction data or an error message.
         """
         try:
-            conn = get_connection(self.db_path)
-            cursor = conn.cursor()
-            if contact_id:
-                cursor.execute("SELECT id, contact_id, type, amount, date, description FROM transactions WHERE contact_id = ?", (contact_id,))
-            else:
-                cursor.execute("SELECT id, contact_id, type, amount, date, description FROM transactions")
-            rows = cursor.fetchall()
-            conn.close()
-            # Convert to list of dicts, not tuples
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                if contact_id:
+                    cursor.execute("SELECT id, contact_id, type, amount, date, description FROM transactions WHERE contact_id = ?", (contact_id,))
+                else:
+                    cursor.execute("SELECT id, contact_id, type, amount, date, description FROM transactions")
+                rows = cursor.fetchall()
             transactions = [
                 {
                     "id": r[0],
@@ -83,11 +80,10 @@ class TransactionsManager:
         Returns a standardized response indicating success or failure.
         """
         try:
-            conn = get_connection(self.db_path)
-            cursor = conn.cursor()
-            cursor.execute("DELETE FROM transactions WHERE id = ?", (transaction_id,))
-            conn.commit()
-            conn.close()
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM transactions WHERE id = ?", (transaction_id,))
+                conn.commit()
             return self.dict_response(True)
         except Exception as e:
             error_msg = f"Error deleting transaction with ID {transaction_id}: {str(e)}"
@@ -103,20 +99,17 @@ class TransactionsManager:
         DEBIT = "debit"
 
         try:
-            conn = get_connection(self.db_path)
-            cursor = conn.cursor()
-            # Retrieve the sum of amounts for each transaction type for the given contact
-            cursor.execute(
-                "SELECT type, SUM(amount) FROM transactions WHERE contact_id = ? GROUP BY type",
-                (contact_id,)
-            )
-            results = cursor.fetchall()
-            conn.close()
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    "SELECT type, SUM(amount) FROM transactions WHERE contact_id = ? GROUP BY type",
+                    (contact_id,)
+                )
+                results = cursor.fetchall()
 
             total_credit = 0
             total_debit = 0
 
-            # Process each transaction type; log any unknown types for debugging
             for transaction_type, total_amount in results:
                 if transaction_type == CREDIT:
                     total_credit += total_amount
@@ -127,10 +120,8 @@ class TransactionsManager:
 
             balance = total_credit - total_debit
 
-            # Return only the balance as required by the test (not a dict of credits/debits)
             return self.dict_response(True, data=balance)
         except Exception as e:
-            # Provide a more descriptive error message and log it for debugging
             error_msg = f"Error calculating balance for contact ID {contact_id}: {str(e)}"
             print(error_msg)
             return self.dict_response(False, error_msg)
