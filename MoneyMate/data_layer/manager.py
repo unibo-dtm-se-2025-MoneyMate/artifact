@@ -30,6 +30,14 @@ class DatabaseManager:
     Central orchestrator for entity managers.
     Provides a unified interface for all data operations.
     """
+    def close(self):
+        """
+        Release all entity managers for test cleanup.
+        """
+        self.expenses = None
+        self.contacts = None
+        self.transactions = None
+    
     def __init__(self, db_path=DB_PATH):
         # Initialize the database and managers
         init_db(db_path)
