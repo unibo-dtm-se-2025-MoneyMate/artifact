@@ -10,7 +10,22 @@ Each function returns a standardized dictionary response.
 
 from MoneyMate.data_layer.manager import DatabaseManager
 
-_db = DatabaseManager()
+_db = None
+
+def get_db():
+    global _db
+    if _db is None:
+        _db = DatabaseManager()
+    return _db
+
+def set_db_path(db_path):
+    """
+    Set the database path for the API module.
+    This allows tests or other modules to use a custom database file.
+    """
+    global _db
+    _db = DatabaseManager(db_path)
+
 
 # --- UTILITY ---
 
