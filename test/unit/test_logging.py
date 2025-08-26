@@ -44,6 +44,10 @@ def db():
     gc.collect()
 
 def test_expense_logging(caplog, db):
+    """
+    Test logging for expense operations: add, invalid add, delete, clear.
+    Verifies correct log level and message for each case.
+    """
     # INFO log for successful expense add
     with caplog.at_level("INFO"):
         result = db.expenses.add_expense("LogTestExpense", 23.0, "2025-08-19", "Transport")
@@ -68,6 +72,10 @@ def test_expense_logging(caplog, db):
         assert result_clear["success"]
 
 def test_contacts_logging(caplog, db):
+    """
+    Test logging for contact operations: add, invalid add, delete.
+    Verifies correct log level and message for each case.
+    """
     # INFO log for successful contact add
     with caplog.at_level("INFO"):
         res = db.contacts.add_contact("LogContact")
@@ -86,6 +94,10 @@ def test_contacts_logging(caplog, db):
         assert "Error deleting contact" in caplog.text or "Deleted contact" in caplog.text
 
 def test_transactions_logging(caplog, db):
+    """
+    Test logging for transaction operations: add, invalid type, delete, balance.
+    Verifies correct log level and message for each case.
+    """
     db.contacts.add_contact("TransLogger")
     contact_id = db.contacts.get_contacts()["data"][0]["id"]
 
@@ -115,6 +127,7 @@ def test_transactions_logging(caplog, db):
 def test_api_logging(caplog):
     """
     API-level logging checks using set_db_path and API functions.
+    Verifies that each API call produces the expected log message.
     """
     set_db_path(TEST_DB)
     # INFO logs for API calls
