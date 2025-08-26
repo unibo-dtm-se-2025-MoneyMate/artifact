@@ -1,21 +1,68 @@
+import pytest
 from MoneyMate.data_layer.validation import validate_expense, validate_contact, validate_transaction
 
-def test_validate_expense_ok():
-    # Test that a valid expense passes validation (returns None).
-    assert validate_expense("Dinner", 10, "2025-08-19", "Food") is None
+# This file tests the pure validation functions for expenses, contacts, and transactions.
+# It uses pytest parametrization for better coverage, readability, and scalability.
+# No database or external resource is involved.
 
-def test_validate_expense_missing_title():
-    # Test that an expense with no title returns an error indicating missing title.
-    assert "title" in validate_expense("", 10, "2025-08-19", "Food").lower()
+@pytest.mark.parametrize(
+    "title, price, date, category", [
+        ("Dinner", 10, "2025-08-19", "Food"),
+        ("Taxi", 15, "2025-08-20", "Transport"),
+        ("Coffee", 2, "2025-08-21", "Drinks"),
+    ]
+)
+def test_validate_expense_ok(title, price, date, category):
+    """
+    Test that valid expense data passes validation (should return None).
+    Using parametrization to check multiple valid cases.
+    """
+    assert validate_expense(title, price, date, category) is None
 
-def test_validate_contact_empty():
-    # Test that an empty contact name returns an error indicating the name is required.
-    assert "required" in validate_contact("")
+@pytest.mark.parametrize(
+    "title",
+    ["", None]
+)
+def test_validate_expense_missing_title(title):
+    """
+    Test that an expense with no title (empty or None) returns an error indicating missing title.
+    """
+    error = validate_expense(title, 10, "2025-08-19", "Food")
+    assert error is not None
+    assert "title" in error.lower()
 
-def test_validate_transaction_type_invalid():
-    # Test that an invalid transaction type returns an error.
-    assert "type" in validate_transaction("wrong", 10, "2025-08-19").lower()
+@pytest.mark.parametrize(
+    "name",
+    ["", None]
+)
+def test_validate_contact_empty(name):
+    """
+    Test that an empty or None contact name returns an error indicating the name is required.
+    """
+    error = validate_contact(name)
+    assert error is not None
+    assert "required" in error.lower()
 
-def test_validate_transaction_negative_amount():
-    # Test that a negative transaction amount returns an error.
-    assert "positive" in validate_transaction("credit", -5, "2025-08-19").lower()
+@pytest.mark.parametrize(
+    "trans_type",
+    ["wrong", "", None]
+)
+def test_validate_transaction_type_invalid(trans_type):
+    """
+    Test that an invalid transaction type returns an error message mentioning 'type'.
+    """
+    error = validate_transaction(trans_type, 10, "2025-08-19")
+    assert error is not None
+    assert "type" in error.lower()
+
+@pytest.mark.parametrize(
+    "amount",
+    [-5, 0, -100]
+)
+def test_validate_transaction_negative_amount(amount):
+    """
+    Test that a non-positive transaction amount returns an error mentioning 'positive'.
+    """
+    error = validate_transaction("credit", amount, "2025-08-19")
+    assert error is not None
+    assert "positive" in error.lower()
