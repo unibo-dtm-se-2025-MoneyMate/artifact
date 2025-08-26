@@ -1,5 +1,5 @@
 import unittest
-from my_project import MyClass
+from MoneyMate import MyClass
 
 class TestMyClass(unittest.TestCase):
     # test methods' names should begin with `test_`

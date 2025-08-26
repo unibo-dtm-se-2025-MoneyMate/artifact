@@ -1,135 +1,252 @@
-# Python project template
+# MoneyMate - Data Layer
 
-A simple template of a Python project, with a rigid file structure, and predisposition for unit testing and release on PyPi.
+## Overview
 
-## Relevant features
+MoneyMate Data Layer manages persistence and business logic for expenses, contacts, and transactions using SQLite.  
+It provides a modular, validated, and fully tested Python API for all operations, following software engineering best practices.
 
-- All your project code into a single main package (`my_project/`)
-- All your project tests into a single test package (`test/`)
-- Unit testing support via [`unittest`](https://docs.python.org/3/library/unittest.html)
-- Automatic testing on all branches via GitHub Actions
-- Semi-automatic versioning via Git
-- Packaging support via [`setuptools`](https://setuptools.pypa.io/en/latest/setuptools.html)
-- Automatic release on [PyPi](https://pypi.org/) via GitHub Actions
-- Docker image support via `Dockerfile`
-- Automatic release on [DockerHub](https://hub.docker.com/) via GitHub Actions
-- Support for semi-automatic development environment management via [Pyenv](https://github.com/pyenv/pyenv)
-- Automatic dependencies updates via [Renovate](https://docs.renovatebot.com/)
-- Automatic conversion of `TODO` comments into GitHub issues via the `alstr/todo-to-issue-action`
+---
 
-## Project structure 
+## Features
 
-Overview:
-```bash
+- **Robust SQLite schema:** Automatically created and versioned.
+- **Entity Managers:** Dedicated Python classes for expenses, contacts, and transactions.
+- **Unified API:** Every operation returns a standardized Python dictionary (`success`, `error`, `data`).
+- **Strong validation:** All input is validated before any database operation.
+- **Structured logging:** Every operation and error is tracked with timestamp, module, and severity.
+- **Configurable DB path:** The database file can be changed at runtime, supporting testing and multiple environments.
+- **Comprehensive unit tests:** All modules and APIs are covered.
+
+---
+
+## Database Schema
+
+| Table        | Fields                                                                              |
+|--------------|-------------------------------------------------------------------------------------|
+| **expenses** | id (PK), title (str), price (float), date (YYYY-MM-DD), category (str)              |
+| **contacts** | id (PK), name (str)                                                                 |
+| **transactions** | id (PK), contact_id (FK), type (debit/credit), amount (float), date (YYYY-MM-DD), description (str) |
+
+Tables and constraints are created automatically during initialization.
+
+---
+
+## Project Structure
+
+```
 <root directory>
-├── my_project/             # main package (should be named after your project)
-│   ├── __init__.py         # python package marker
-│   └── __main__.py         # application entry point
-├── test/                   # test package (should contain unit tests)
-├── .github/                # configuration of GitHub CI
-│   └── workflows/          # configuration of GitHub Workflows
-│       ├── check.yml       # runs tests on multiple OS and versions of Python
-│       └── deploy.yml      # if check succeeds, and the current branch is one of {main, master}, triggers automatic releas on PyPi
-├── MANIFEST.in             # file stating what to include/exclude in releases 
-├── LICENSE                 # license file (Apache 2.0 by default)
-├── pyproject.toml          # declares build dependencies
-├── renovate.json           # configuration of Renovate bot, for automatic dependency updates
-├── requirements-dev.txt    # declares development dependencies
-├── requirements.txt        # declares runtime dependencies
-├── setup.py                # configuration of the package to be released on Pypi
-└── Dockerfile              # configuration of the Docker image to be realsed on Dockerhub
+├── MoneyMate/
+│   ├── __init__.py
+│   ├── __main__.py
+│   └── data_layer/
+│       ├── __init__.py
+│       ├── api.py
+│       ├── contacts.py
+│       ├── database.py
+│       ├── expenses.py
+│       ├── logging_config.py
+│       ├── manager.py
+│       ├── transactions.py
+│       ├── validation.py
+│
+├── test/
+│   └── data_layer/
+│       ├── __init__.py
+│       ├── test_api.py
+│       ├── test_contacts.py
+│       ├── test_database.py
+│       ├── test_expenses.py
+│       ├── test_logging.py
+│       ├── test_manager.py
+│       ├── test_transactions.py
+│       └── test_validation.py
+│
+├── .github/
+│   └── workflows/
+│       ├── check.yml
+│       └── deploy.yml
+├── MANIFEST.in
+├── LICENSE
+├── pyproject.toml
+├── README.md
+├── renovate.json
+├── requirements-dev.txt
+├── requirements.txt
+├── setup.py
+└── Dockerfile
 ```
 
-## TODO-list for template usage
+---
 
-1. Use this template to create a new GitHub repository, say `my_project`
-    - this name will also be used to identify the package on PyPi
-        + so, we suggest choosing a name which has not been used on PyPi, yet
-        + we also suggest choosing a name which is a valid Python package name (i.e. `using_snake_case`)
+## Usage
 
-2. Clone the `my_project` repository
+### Database Initialization
 
-3. Open a shell into your local `my_project` directory and run 
-    ```bash
-    ./rename-template.sh my_project
-    ``` 
-    
-    This will coherently rename the template's project name with the one chosen by you (i.e. `my_project`, in this example)
+The database is created automatically:
 
-4. Commit & push
+```python
+from MoneyMate.data_layer.manager import DatabaseManager
 
-5. Ensure you like the [Apache 2.0 License](https://www.apache.org/licenses/LICENSE-2.0.html). If you don't, change the content of the `LICENSE` file
-
-6. Ensure the version reported in `.python-version` corresponds to the actual Python version you are willing to use to develop your project
-
-7. Check the Python version and OS tests should be run on in CI, by looking the file `.github/workflows/check.yml`
-
-8. Add your runtime dependencies to `requirements.txt`
-    + and development-only dependencies here `requirements-dev.txt`
-
-9. Set your project's release metadata and dependencies by editing `setup.py`
-
-10. Change the assignee for pull-requests for automatic dependency updates by editing `renovate.json`
-    + currently defaults to @gciatto
-
-11. Add your PyPi credentials as secrets of the GitHub repository 
-    - `PYPI_USERNAME` (resp. `PYPI_PASSWORD`) for your username (resp. password)
-    - this may require you to register on PyPi first
-
-12. Generate a GitHub token and add it as a secret of the GitHub repository, named `RELEASE_TOKEN`
-    - cf. <https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens#creating-a-personal-access-token-classic>
-    - the token must allow pushing to the repository
-
-13. Put your main (resp. test) code in `my_project/` (resp. `test/`)
-
-## How to do stuff
-
-### Run your code as an application
-
-This will execute the file `my_project/__main__.py`:
-```bash
-python -m my_project 
+db = DatabaseManager()            # Uses "moneymate.db" by default
+db = DatabaseManager("custom.db") # Uses a custom file (for testing/production)
 ```
 
-### Run unit tests
+---
 
-```bash
-python -m unittest discover -s test -t .
+### Entity Managers
+
+Each manager provides dedicated CRUD and utility operations:
+
+```python
+# Expenses
+db.expenses.add_expense("Dinner", 25.5, "2025-08-19", "Food")
+db.expenses.get_expenses()
+db.expenses.search_expenses("Food")
+db.expenses.delete_expense(1)
+db.expenses.clear_expenses()
+
+# Contacts
+db.contacts.add_contact("Mario Rossi")
+db.contacts.get_contacts()
+db.contacts.delete_contact(1)
+
+# Transactions
+db.transactions.add_transaction(contact_id=1, type_="credit", amount=50, date="2025-08-19", description="Loan")
+db.transactions.get_transactions(contact_id=1)
+db.transactions.delete_transaction(1)
+db.transactions.get_contact_balance(contact_id=1)
 ```
 
-> Tests are automatically run in CI, on all pushes on all branches.
-> There, tests are executed on multiple OS (Win, Mac, Ubuntu) and on multiple Python versions (from `3.8` to `3.11`).
+---
 
-### Restore dev dependencies
+### Unified API
 
-```bash
-pip install -r requirements-dev.txt
+High-level API functions for integration with other modules:
+
+```python
+from MoneyMate.data_layer.api import (
+    api_add_expense, api_get_expenses, api_search_expenses,
+    api_delete_expense, api_clear_expenses,
+    api_add_contact, api_get_contacts, api_delete_contact,
+    api_add_transaction, api_get_transactions, api_delete_transaction,
+    api_get_contact_balance, set_db_path, api_list_tables
+)
+
+set_db_path("test_api.db")  # Change DB for API operations
+
+res = api_add_expense("Lunch", 12, "2025-08-19", "Food")
+print(res)  # {'success': True, 'error': None, 'data': None}
 ```
 
-### Release a new version on PyPi
+---
 
-> This paragraph is more understandable if the reader has some background about [GitFlow](https://www.atlassian.com/git/tutorials/comparing-workflows/gitflow-workflow)
+### Validation & Error Handling
 
-GitHub actions automatically release a new version of `my_project` on PyPi whenever commits are pushed on either the `main`/`master` or `develop` branches, as well as when new tags are pushed.
+- **Expenses:** title, price, date, and category are required; price must be positive; date format "YYYY-MM-DD".
+- **Contacts:** name required.
+- **Transactions:** type must be debit or credit, amount positive, date "YYYY-MM-DD", contact must exist.
+- Errors are returned in the `"error"` field of the API response.
 
-Tags are assumed to consist of [semantic versioning](https://semver.org/) strings of the form `Major.Minor.Patch` where `Major`, `Minor`, and `Patch` are non-negative integers.
+---
 
-So, to release version `X.Y.Z`, developers must:
+### Logging
 
-1. tag a commit on the `master`/`main`/`develop` branch, using `X.Y.Z` as the tag label
-    ```bash
-    git tag -a 'X.Y.Z' -m <a message here describing the version>
-    ```
+Structured logging enabled by default:
 
-2. push the tag
-    ```bash
-    git push --follow-tags
-    ```
+- Default level: `INFO`. For debugging, set `DEBUG` in `logging_config.py`.
+- Every operation logs time, module, level, and message.
 
-3. GitHub Actions will then run tests and, if all of them succeed, release the code on PyPi.
-After the release, users will be able to install your code via Pip.
+---
 
-> Non-tagged commits pushed on the `master`/`main`/`develop` branch will trigger __dev releases__.
-> Dev releases are automatically tagged as `X.Y.Y.devN`, where
-> - `X.Y.Y` is the value of the __most recent__ version tag
-> - `N` is the amount of commits following the most recent version tag 
+### Dynamic Database Path
+
+Change the database file at runtime:
+
+```python
+db.set_db_path("newfile.db")  # Change persistence file for all operations
+```
+Or via API:
+
+```python
+from MoneyMate.data_layer.api import set_db_path
+set_db_path("test_api.db")
+```
+
+---
+
+### API Response Format
+
+Every API call returns a Python dictionary:
+
+```python
+{
+    "success": True/False,
+    "error": "Error message" or None,
+    "data": object/list/value or None
+}
+```
+
+---
+
+## Automated Testing
+
+**All modules and APIs are covered by unit tests** in `test/data_layer/`.
+
+### Running Tests
+
+```shell
+pytest test/data_layer/
+```
+
+### Test Coverage
+
+- **API Integration (`test_api.py`):** Add, retrieve, search, and delete expenses and contacts. Add transactions and verify contact balances. Switch DB for isolation. Validate response format and error handling.
+- **Expenses (`test_expenses.py`):** Add expense (valid/invalid data). Search by title/category. Delete individual, clear all. Check date format and API response.
+- **Contacts (`test_contacts.py`):** Add, retrieve, and delete contacts. Handle empty name errors.
+- **Transactions (`test_transactions.py`):** Add, retrieve, and delete transactions. Validate type and amount. Calculate contact balances. Handle non-existent contacts.
+- **Logging (`test_logging.py`):**  
+  Test correct logging for all operations (expenses, contacts, transactions, and API calls).  
+  Checks that successful operations, validation errors, and deletions are logged with correct level and message.
+- **Database (`test_database.py`):** Table creation and connection.
+- **Manager (`test_manager.py`):** Orchestrator and table listing.
+- **Validation (`test_validation.py`):** Validation function tests for correct and error cases.
+
+**Testing Best Practices:**
+- Each test creates and destroys its own database for isolation.
+- Both success and failure scenarios are covered.
+- Always check API response format.
+
+**Example test:**
+
+```python
+def test_api_add_and_get_expense():
+    res = api_add_expense("Test", 5, "2025-08-19", "Food")
+    assert res["success"]
+    res_get = api_get_expenses()
+    assert any(e["title"] == "Test" for e in res_get["data"])
+```
+
+---
+
+## Software Engineering Principles
+
+- **Single Responsibility:** Each manager is responsible for a single entity.
+- **Dependency Injection:** Transactions manager receives contacts manager for cross-validation.
+- **Configurability:** The database path is always parameterized.
+- **Error handling:** Errors are explicit and handled at all layers.
+- **Testing:** All modules are covered by isolated, reproducible tests.
+- **Modularity:** Easy to extend or refactor, no code duplication.
+- **Resource Management:** Safe DB connections via context managers.
+- **Documentation:** Rich docstrings, README with practical examples.
+
+---
+
+## Authors & Maintenance
+
+**Data Layer & Architecture:** Giovanardi  
+**Repository:** [unibo-dtm-se-2025-MoneyMate/artifact](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact)
+
+For questions or support:
+- See docstrings and source documentation.
+- Open an issue on GitHub.
+- Run tests to validate installation.

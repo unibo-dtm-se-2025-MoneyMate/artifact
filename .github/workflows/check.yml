@@ -12,6 +12,10 @@ on:
       - 'renovate.json'
   pull_request:
   workflow_dispatch:
+
+permissions:
+  contents: write
+
 jobs:
   test:
     strategy:
@@ -45,7 +49,7 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Test
-        run: python -m unittest discover -s test -t .
+        run: pytest
   deploy:
     needs:
       - test

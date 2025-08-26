@@ -80,11 +80,11 @@ class GetMinimumPythonVersion(distutils.cmd.Command):
         print(".".join(python_version[2:].split(".")[:2]))
 
 
-url = 'https://github.com/aequitas-aod/my_project'
+url = 'https://github.com/aequitas-aod/MoneyMate'
 
 
 setup(
-    name='my_project',  # Required
+    name='MoneyMate',  # Required
     version=version,
     description='Description of the project here',
     license='Apache 2.0 License',
