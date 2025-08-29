@@ -26,7 +26,7 @@ class TransactionsManager:
         if err:
             logger.warning(f"Validation failed for transaction (from_user_id={from_user_id}, to_user_id={to_user_id}, type={type_}, amount={amount}): {err}")
             return self.dict_response(False, err)
-        # --- NEW: User existence check for sender and receiver ---
+        # --- User existence check for sender and receiver ---
         if not self._user_exists(from_user_id):
             logger.warning(f"Transaction validation failed: from_user_id {from_user_id} does not exist.")
             return self.dict_response(False, "Sender user does not exist")
@@ -64,10 +64,24 @@ class TransactionsManager:
             logger.error(f"Error checking existence for user ID {user_id}: {e}")
             return False
 
+    def _is_admin(self, user_id):
+        """
+        Returns True if the given user has role 'admin', False otherwise.
+        """
+        try:
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
+                row = cursor.fetchone()
+                return bool(row and row[0] == "admin")
+        except Exception as e:
+            logger.error(f"Error checking admin role for user ID {user_id}: {e}")
+            return False
+
     def get_transactions(self, user_id, as_sender=True, is_admin=False):
         """
         Retrieves transactions from the database.
-        If is_admin is True, returns ALL transactions in the system.
+        If is_admin is True, validates the user's role and returns ALL transactions.
         If as_sender is True, returns those WHERE from_user_id=user_id.
         If False, returns those WHERE to_user_id=user_id.
         """
@@ -75,6 +89,10 @@ class TransactionsManager:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
                 if is_admin:
+                    # Enforce role check instead of trusting the flag blindly
+                    if not self._is_admin(user_id):
+                        logger.warning(f"Transactions access denied: user {user_id} is not admin but requested is_admin=True.")
+                        return self.dict_response(False, "Admin privileges required")
                     cursor.execute("SELECT id, from_user_id, to_user_id, type, amount, date, description, contact_id FROM transactions")
                 elif as_sender:
                     cursor.execute("SELECT id, from_user_id, to_user_id, type, amount, date, description, contact_id FROM transactions WHERE from_user_id = ?", (user_id,))
