@@ -8,6 +8,7 @@ from MoneyMate.data_layer.api import (
     set_db_path, api_register_user, api_login_user
 )
 from MoneyMate.data_layer.manager import DatabaseManager
+from MoneyMate.data_layer.database import get_connection
 
 TEST_DB = "test_api.db"
 
@@ -176,3 +177,26 @@ def test_api_admin_wrong_password():
     assert isinstance(res, dict)
     assert not res["success"]
     assert "admin password" in str(res["error"]).lower()
+
+def test_api_add_expense_with_category_id():
+    """
+    Add an expense via API with category_id linked to a user-owned category.
+    Expects success and category_id present when retrieving expenses.
+    """
+    user_id = _get_test_user()
+    # Create category for this user
+    with get_connection(TEST_DB) as conn:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO categories (user_id, name) VALUES (?, ?)", (user_id, "APICat"))
+        cat_id = cur.lastrowid
+        conn.commit()
+
+    res = api_add_expense("APICatExpense", 8.0, "2025-08-19", "Food", user_id, category_id=cat_id)
+    assert res["success"]
+
+    res_get = api_get_expenses(user_id)
+    assert res_get["success"]
+    matches = [e for e in res_get["data"] if e["title"] == "APICatExpense"]
+    assert matches, "Expected the API-inserted expense to be present"
+    assert "category_id" in matches[0]
+    assert matches[0]["category_id"] == cat_id
