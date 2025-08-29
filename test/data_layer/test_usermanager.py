@@ -112,6 +112,11 @@ def test_change_and_reset_password():
     login_new = db.users.login_user("usr", "newpw")
     assert login_new["success"]
 
+    # Attempt change with wrong old password (should fail)
+    bad_change = db.users.change_password(user_id, "wrong", "newer")
+    assert not bad_change["success"]
+    assert "old password" in bad_change["error"].lower()
+
     # Reset password as admin
     reset = db.users.reset_password(admin_id, user_id, "resetpw")
     assert reset["success"]
@@ -128,7 +133,7 @@ def test_change_and_reset_password():
 
 def test_access_logs_auditing():
     """
-    Verify that access_logs records login, failed_login, password_change, and password_reset events.
+    Verify that access_logs records login, failed_login, password_change, password_reset, and logout events.
     Uses deltas to avoid flaky counts when tests run multiple times.
     """
     db = DatabaseManager(TEST_DB)
@@ -160,18 +165,21 @@ def test_access_logs_auditing():
     base_failed = get_count("failed_login", user_id)
     base_change = get_count("password_change", user_id)
     base_reset = get_count("password_reset", user_id)
+    base_logout = get_count("logout", user_id)
 
     # Trigger events
     assert db.users.login_user("audit_user", "pw")["success"]
     assert not db.users.login_user("audit_user", "wrong")["success"]
     assert db.users.change_password(user_id, "pw", "pw2")["success"]
     assert db.users.reset_password(admin_id, user_id, "pw3")["success"]
+    assert db.users.logout_user(user_id)["success"]
 
     # Post counts (expect +1 for each)
     assert get_count("login", user_id) == base_login + 1
     assert get_count("failed_login", user_id) == base_failed + 1
     assert get_count("password_change", user_id) == base_change + 1
     assert get_count("password_reset", user_id) == base_reset + 1
+    assert get_count("logout", user_id) == base_logout + 1
 
     db.close()
     gc.collect()
