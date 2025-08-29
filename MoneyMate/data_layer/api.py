@@ -62,6 +62,18 @@ def api_list_tables():
     logger.info("API call: api_list_tables")
     return get_db().list_tables()
 
+def api_health():
+    """
+    Lightweight health check for GUI integration.
+    Returns: dict {success, error, data: {schema_version}}
+    """
+    logger.info("API call: api_health")
+    from MoneyMate.data_layer.database import get_schema_version
+    # Use the current db_path from the manager to read version
+    db = get_db()
+    version_resp = get_schema_version(db.db_path)
+    return version_resp
+
 # --- USERS API ---
 
 def api_register_user(username, password, role="user"):
@@ -73,13 +85,22 @@ def api_register_user(username, password, role="user"):
     logger.info(f"API call: api_register_user (username={username}, role={role})")
     return get_db().users.register_user(username, password, role)
 
-def api_login_user(username, password):
+def api_login_user(username, password, ip_address=None, user_agent=None):
     """
     Authenticate a user.
+    Optionally records ip_address and user_agent to access_logs for auditing.
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_login_user (username={username})")
-    return get_db().users.login_user(username, password)
+    return get_db().users.login_user(username, password, ip_address=ip_address, user_agent=user_agent)
+
+def api_logout_user(user_id, ip_address=None, user_agent=None):
+    """
+    Log a user logout event into access_logs (best-effort).
+    Returns: dict {success, error, data}
+    """
+    logger.info(f"API call: api_logout_user (user_id={user_id})")
+    return get_db().users.logout_user(user_id, ip_address=ip_address, user_agent=user_agent)
 
 # Optional high-level APIs for user management (not required by current tests)
 def api_change_password(user_id, old_password, new_password):
@@ -97,6 +118,32 @@ def api_get_user_role(user_id):
 def api_set_user_role(admin_user_id, target_user_id, new_role):
     logger.info(f"API call: api_set_user_role (admin_user_id={admin_user_id}, target_user_id={target_user_id}, new_role={new_role})")
     return get_db().users.set_user_role(admin_user_id, target_user_id, new_role)
+
+# --- CATEGORIES API (optional, for GUI management) ---
+
+def api_add_category(user_id, name, description=None, color=None, icon=None):
+    """
+    Add a new category for the specified user.
+    Returns: dict {success, error, data}
+    """
+    logger.info(f"API call: api_add_category (user_id={user_id}, name={name})")
+    return get_db().categories.add_category(user_id, name, description, color, icon)
+
+def api_get_categories(user_id):
+    """
+    List categories for the specified user.
+    Returns: dict {success, error, data}
+    """
+    logger.info(f"API call: api_get_categories (user_id={user_id})")
+    return get_db().categories.get_categories(user_id)
+
+def api_delete_category(category_id, user_id):
+    """
+    Delete a category by id for the specified user.
+    Returns: dict {success, error, data}
+    """
+    logger.info(f"API call: api_delete_category (category_id={category_id}, user_id={user_id})")
+    return get_db().categories.delete_category(category_id, user_id)
 
 # --- EXPENSES API ---
 
