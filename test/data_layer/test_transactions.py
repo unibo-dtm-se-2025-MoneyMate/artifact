@@ -17,8 +17,14 @@ def db():
         os.remove(TEST_DB)
     dbm = DatabaseManager(TEST_DB)
     # Add two users for transaction tests
-    from_id = dbm.users.register_user("sender", "pw")["data"]["user_id"]
-    to_id = dbm.users.register_user("receiver", "pw")["data"]["user_id"]
+    sender_res = dbm.users.register_user("sender", "pw")
+    if not sender_res["success"]:
+        sender_res = dbm.users.login_user("sender", "pw")
+    from_id = sender_res["data"]["user_id"]
+    receiver_res = dbm.users.register_user("receiver", "pw")
+    if not receiver_res["success"]:
+        receiver_res = dbm.users.login_user("receiver", "pw")
+    to_id = receiver_res["data"]["user_id"]
     dbm._from_user_id = from_id
     dbm._to_user_id = to_id
     yield dbm
