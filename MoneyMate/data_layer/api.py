@@ -40,9 +40,16 @@ def set_db_path(db_path):
     global _db
     if db_path is None:
         logger.info("Releasing DatabaseManager instance (cleanup).")
-        _db = None
+        try:
+            if _db is not None and hasattr(_db, "close"):
+                _db.close()
+        finally:
+            _db = None
     else:
         logger.info(f"Setting DatabaseManager db_path to: {db_path}")
+        # Close existing manager (if any) before swapping
+        if _db is not None and hasattr(_db, "close"):
+            _db.close()
         _db = DatabaseManager(db_path)
 
 # --- UTILITY ---
@@ -53,7 +60,7 @@ def api_list_tables():
     Returns: dict {success, error, data}
     """
     logger.info("API call: api_list_tables")
-    return _db.list_tables()
+    return get_db().list_tables()
 
 # --- USERS API ---
 
@@ -64,7 +71,7 @@ def api_register_user(username, password, role="user"):
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_register_user (username={username}, role={role})")
-    return _db.users.register_user(username, password, role)
+    return get_db().users.register_user(username, password, role)
 
 def api_login_user(username, password):
     """
@@ -72,24 +79,24 @@ def api_login_user(username, password):
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_login_user (username={username})")
-    return _db.users.login_user(username, password)
+    return get_db().users.login_user(username, password)
 
 # Optional high-level APIs for user management (not required by current tests)
 def api_change_password(user_id, old_password, new_password):
     logger.info(f"API call: api_change_password (user_id={user_id})")
-    return _db.users.change_password(user_id, old_password, new_password)
+    return get_db().users.change_password(user_id, old_password, new_password)
 
 def api_reset_password(admin_user_id, target_user_id, new_password):
     logger.info(f"API call: api_reset_password (admin_user_id={admin_user_id}, target_user_id={target_user_id})")
-    return _db.users.reset_password(admin_user_id, target_user_id, new_password)
+    return get_db().users.reset_password(admin_user_id, target_user_id, new_password)
 
 def api_get_user_role(user_id):
     logger.info(f"API call: api_get_user_role (user_id={user_id})")
-    return _db.users.get_user_role(user_id)
+    return get_db().users.get_user_role(user_id)
 
 def api_set_user_role(admin_user_id, target_user_id, new_role):
     logger.info(f"API call: api_set_user_role (admin_user_id={admin_user_id}, target_user_id={target_user_id}, new_role={new_role})")
-    return _db.users.set_user_role(admin_user_id, target_user_id, new_role)
+    return get_db().users.set_user_role(admin_user_id, target_user_id, new_role)
 
 # --- EXPENSES API ---
 
@@ -103,7 +110,7 @@ def api_add_expense(title, price, date, category, user_id, category_id=None):
         f"API call: api_add_expense (title={title}, price={price}, date={date}, "
         f"category={category}, user_id={user_id}, category_id={category_id})"
     )
-    return _db.expenses.add_expense(title, price, date, category, user_id, category_id=category_id)
+    return get_db().expenses.add_expense(title, price, date, category, user_id, category_id=category_id)
 
 def api_get_expenses(user_id):
     """
@@ -111,7 +118,7 @@ def api_get_expenses(user_id):
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_get_expenses (user_id={user_id})")
-    return _db.expenses.get_expenses(user_id)
+    return get_db().expenses.get_expenses(user_id)
 
 def api_search_expenses(query, user_id):
     """
@@ -119,7 +126,7 @@ def api_search_expenses(query, user_id):
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_search_expenses (query={query}, user_id={user_id})")
-    return _db.expenses.search_expenses(query, user_id)
+    return get_db().expenses.search_expenses(query, user_id)
 
 def api_delete_expense(expense_id, user_id):
     """
@@ -127,7 +134,7 @@ def api_delete_expense(expense_id, user_id):
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_delete_expense (expense_id={expense_id}, user_id={user_id})")
-    return _db.expenses.delete_expense(expense_id, user_id)
+    return get_db().expenses.delete_expense(expense_id, user_id)
 
 def api_clear_expenses(user_id):
     """
@@ -135,7 +142,7 @@ def api_clear_expenses(user_id):
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_clear_expenses (user_id={user_id})")
-    return _db.expenses.clear_expenses(user_id)
+    return get_db().expenses.clear_expenses(user_id)
 
 # --- CONTACTS API ---
 
@@ -145,7 +152,7 @@ def api_add_contact(name, user_id):
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_add_contact (name={name}, user_id={user_id})")
-    return _db.contacts.add_contact(name, user_id)
+    return get_db().contacts.add_contact(name, user_id)
 
 def api_get_contacts(user_id):
     """
@@ -153,7 +160,7 @@ def api_get_contacts(user_id):
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_get_contacts (user_id={user_id})")
-    return _db.contacts.get_contacts(user_id)
+    return get_db().contacts.get_contacts(user_id)
 
 def api_delete_contact(contact_id, user_id):
     """
@@ -161,7 +168,7 @@ def api_delete_contact(contact_id, user_id):
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_delete_contact (contact_id={contact_id}, user_id={user_id})")
-    return _db.contacts.delete_contact(contact_id, user_id)
+    return get_db().contacts.delete_contact(contact_id, user_id)
 
 # --- TRANSACTIONS API ---
 
@@ -174,19 +181,19 @@ def api_add_transaction(from_user_id, to_user_id, type_, amount, date, descripti
         f"API call: api_add_transaction (from_user_id={from_user_id}, to_user_id={to_user_id}, "
         f"type={type_}, amount={amount}, date={date}, description={description}, contact_id={contact_id})"
     )
-    return _db.transactions.add_transaction(from_user_id, to_user_id, type_, amount, date, description, contact_id)
+    return get_db().transactions.add_transaction(from_user_id, to_user_id, type_, amount, date, description, contact_id)
 
 def api_get_transactions(user_id, as_sender=True, is_admin=False):
     """
     List transactions for the user.
-    If is_admin is True, returns all transactions in the system.
+    If is_admin is True, returns all transactions in the system (validated by data layer).
     Otherwise:
       - If as_sender is True, returns transactions sent by the user.
       - If False, returns transactions received by the user.
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_get_transactions (user_id={user_id}, as_sender={as_sender}, is_admin={is_admin})")
-    return _db.transactions.get_transactions(user_id, as_sender, is_admin)
+    return get_db().transactions.get_transactions(user_id, as_sender, is_admin)
 
 def api_delete_transaction(transaction_id, user_id):
     """
@@ -194,7 +201,7 @@ def api_delete_transaction(transaction_id, user_id):
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_delete_transaction (transaction_id={transaction_id}, user_id={user_id})")
-    return _db.transactions.delete_transaction(transaction_id, user_id)
+    return get_db().transactions.delete_transaction(transaction_id, user_id)
 
 def api_get_user_balance(user_id):
     """
@@ -202,4 +209,4 @@ def api_get_user_balance(user_id):
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_get_user_balance (user_id={user_id})")
-    return _db.transactions.get_user_balance(user_id)
+    return get_db().transactions.get_user_balance(user_id)
