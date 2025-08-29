@@ -130,3 +130,45 @@ def test_categories_with_expenses_validation_and_after_delete(tmp_path):
 
     # Cleanup: close manager; rely on tmp_path auto-cleanup (avoid manual delete on Windows locks)
     db.close()
+
+
+def test_categories_same_name_different_users_and_unauthorized_delete(tmp_path):
+    """
+    Ensure same category name can exist for different users and unauthorized deletes do not remove other's categories.
+    """
+    db_file = tmp_path / "cats_crossuser.db"
+    db = DatabaseManager(str(db_file))
+
+    # Users
+    u1 = db.users.register_user("cat_user_a", "pw")["data"]["user_id"]
+    u2 = db.users.register_user("cat_user_b", "pw")["data"]["user_id"]
+
+    # Same name allowed across users
+    r1 = db.categories.add_category(u1, "Shared")
+    r2 = db.categories.add_category(u2, "Shared")
+    assert r1["success"] and r2["success"]
+
+    cat1_id = db.categories.get_categories(u1)["data"][0]["id"]
+    cat2_id = db.categories.get_categories(u2)["data"][0]["id"]
+    assert cat1_id != cat2_id
+
+    # Unauthorized delete: user2 tries to delete user1's category (should not remove it)
+    del_wrong = db.categories.delete_category(cat1_id, user_id=u2)
+    # The method returns success even if nothing was deleted; verify category still exists for user1
+    assert del_wrong["success"]
+    cats_u1_after = db.categories.get_categories(u1)
+    assert cats_u1_after["success"]
+    ids_u1 = {c["id"] for c in cats_u1_after["data"]}
+    assert cat1_id in ids_u1
+
+    # Authorized delete by owner
+    del_ok = db.categories.delete_category(cat1_id, user_id=u1)
+    assert del_ok["success"]
+    ids_u1_after = {c["id"] for c in db.categories.get_categories(u1)["data"]}
+    assert cat1_id not in ids_u1_after
+
+    # Other user's category remains
+    ids_u2_after = {c["id"] for c in db.categories.get_categories(u2)["data"]}
+    assert cat2_id in ids_u2_after
+
+    db.close()
