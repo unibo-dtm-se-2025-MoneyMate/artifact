@@ -3,7 +3,7 @@ api.py
 Unified API interface for MoneyMate data layer, using DatabaseManager.
 
 This module provides high-level functions to interact with expenses,
-contacts, and transactions, wrapping DatabaseManager methods.
+contacts, transactions, and users, wrapping DatabaseManager methods.
 Each function returns a standardized dictionary response.
 """
 
@@ -45,6 +45,24 @@ def api_list_tables():
     """
     logger.info("API call: api_list_tables")
     return _db.list_tables()
+
+# --- USERS API ---
+
+def api_register_user(username, password):
+    """
+    Register a new user.
+    Returns: dict {success, error, data}
+    """
+    logger.info(f"API call: api_register_user (username={username})")
+    return _db.users.register_user(username, password)
+
+def api_login_user(username, password):
+    """
+    Authenticate a user.
+    Returns: dict {success, error, data}
+    """
+    logger.info(f"API call: api_login_user (username={username})")
+    return _db.users.login_user(username, password)
 
 # --- EXPENSES API ---
 
