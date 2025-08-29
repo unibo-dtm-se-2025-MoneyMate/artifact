@@ -7,7 +7,7 @@ from MoneyMate.data_layer.api import (
     api_add_expense, api_add_contact, api_add_transaction,
     api_delete_expense, api_delete_contact, api_delete_transaction,
     api_search_expenses, api_get_user_balance,
-    set_db_path, api_clear_expenses, api_register_user
+    set_db_path, api_clear_expenses, api_register_user, api_login_user
 )
 
 TEST_DB = "test_logging.db"
@@ -37,7 +37,14 @@ def db():
     Ensures a fresh DatabaseManager instance using TEST_DB.
     """
     dbm = DatabaseManager(TEST_DB)
-    user_id = dbm.users.register_user("loguser", "pw")["data"]["user_id"]
+    user_res = dbm.users.register_user("loguser", "pw")
+    if not user_res["success"]:
+        # If already exists, login instead
+        login_res = dbm.users.login_user("loguser", "pw")
+        assert login_res["success"]
+        user_id = login_res["data"]["user_id"]
+    else:
+        user_id = user_res["data"]["user_id"]
     dbm._test_user_id = user_id
     yield dbm
     if hasattr(dbm, "close"):
@@ -94,7 +101,10 @@ def test_transactions_logging(caplog, db):
     """
     # We need two users for transactions
     sender_id = db._test_user_id
-    receiver_id = db.users.register_user("logreceiver", "pw")["data"]["user_id"]
+    receiver_res = db.users.register_user("logreceiver", "pw")
+    if not receiver_res["success"]:
+        receiver_res = db.users.login_user("logreceiver", "pw")
+    receiver_id = receiver_res["data"]["user_id"]
 
     with caplog.at_level("INFO"):
         res = db.transactions.add_transaction(sender_id, receiver_id, "debit", 10.0, "2025-08-19", "Log")
@@ -121,7 +131,10 @@ def test_api_logging(caplog):
     Verifies that each API call produces the expected log message.
     """
     set_db_path(TEST_DB)
-    user_id = api_register_user("apiloguser", "pw")["data"]["user_id"]
+    user_res = api_register_user("apiloguser", "pw")
+    if not user_res["success"]:
+        user_res = api_login_user("apiloguser", "pw")
+    user_id = user_res["data"]["user_id"]
     with caplog.at_level("INFO"):
         api_add_contact("APILogContact", user_id)
         assert "API call: api_add_contact" in caplog.text
