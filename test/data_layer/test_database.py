@@ -31,7 +31,8 @@ def test_tables_created():
     tables_result = list_tables(TEST_DB)
     assert isinstance(tables_result, dict)
     tables = tables_result["data"]
-    assert set(tables) >= {"contacts", "expenses", "transactions"}
+    # Now expect users, expenses, contacts, transactions
+    assert set(tables) >= {"users", "contacts", "expenses", "transactions"}
 
 def test_get_connection():
     """
