@@ -20,12 +20,19 @@ class TransactionsManager:
     def add_transaction(self, from_user_id, to_user_id, type_, amount, date, description="", contact_id=None):
         """
         Adds a new transaction between users.
-        Validates input and ensures users are different (if needed).
+        Validates input and ensures users exist and are different (if needed).
         """
         err = validate_transaction(type_, amount, date)
         if err:
             logger.warning(f"Validation failed for transaction (from_user_id={from_user_id}, to_user_id={to_user_id}, type={type_}, amount={amount}): {err}")
             return self.dict_response(False, err)
+        # --- NEW: User existence check for sender and receiver ---
+        if not self._user_exists(from_user_id):
+            logger.warning(f"Transaction validation failed: from_user_id {from_user_id} does not exist.")
+            return self.dict_response(False, "Sender user does not exist")
+        if not self._user_exists(to_user_id):
+            logger.warning(f"Transaction validation failed: to_user_id {to_user_id} does not exist.")
+            return self.dict_response(False, "Receiver user does not exist")
         if contact_id and not self.contacts_manager.contact_exists(contact_id, from_user_id):
             logger.warning(f"Transaction validation failed: contact_id {contact_id} does not exist for user {from_user_id}.")
             return self.dict_response(False, "Contact does not exist")
@@ -43,6 +50,19 @@ class TransactionsManager:
             error_msg = f"Error adding transaction from user {from_user_id} to user {to_user_id}: {str(e)}"
             logger.error(error_msg)
             return self.dict_response(False, error_msg)
+
+    def _user_exists(self, user_id):
+        """
+        Returns True if the user exists, False otherwise.
+        """
+        try:
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT 1 FROM users WHERE id = ?", (user_id,))
+                return cursor.fetchone() is not None
+        except Exception as e:
+            logger.error(f"Error checking existence for user ID {user_id}: {e}")
+            return False
 
     def get_transactions(self, user_id, as_sender=True):
         """
@@ -97,6 +117,7 @@ class TransactionsManager:
     def get_user_balance(self, user_id):
         """
         Calculates the balance for a user based on transactions (credit received, debit sent).
+        Note: The function sums credit and debit for both sent and received transactions.
         """
         CREDIT = "credit"
         DEBIT = "debit"
@@ -104,7 +125,7 @@ class TransactionsManager:
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
-                # Sum all credits received and debits sent
+                # Sum all credits and debits where user is sender or receiver
                 cursor.execute(
                     """
                     SELECT type, SUM(amount) FROM transactions
