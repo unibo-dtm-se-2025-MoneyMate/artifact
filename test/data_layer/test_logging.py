@@ -1,5 +1,6 @@
 import os
 import gc
+import time
 import pytest
 
 from MoneyMate.data_layer.manager import DatabaseManager
@@ -24,11 +25,19 @@ def setup_module(module):
 def teardown_module(module):
     """
     Module teardown: release API DB reference and clean up the test database file.
+    Adds a retry loop to avoid Windows file locks.
     """
     set_db_path(None)
     gc.collect()
+    for _ in range(10):
+        try:
+            if os.path.exists(TEST_DB):
+                os.remove(TEST_DB)
+            break
+        except PermissionError:
+            time.sleep(0.2)
     if os.path.exists(TEST_DB):
-        os.remove(TEST_DB)
+        raise PermissionError(f"Unable to delete test database file: {TEST_DB}")
 
 @pytest.fixture
 def db():
