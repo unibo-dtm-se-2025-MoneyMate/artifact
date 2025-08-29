@@ -8,6 +8,11 @@ Each function returns a standardized dictionary response.
 
 Now supports user-scoped operations for expenses, contacts, and transactions,
 including tracking transactions/credit between users.
+
+Extended:
+- User roles (admin/user): admin can view all transactions
+- Admin registration policy: enforced in UserManager (password '12345')
+- API now forwards 'role' to user registration and 'is_admin' to transactions listing
 """
 
 from MoneyMate.data_layer.manager import DatabaseManager
@@ -51,13 +56,14 @@ def api_list_tables():
 
 # --- USERS API ---
 
-def api_register_user(username, password):
+def api_register_user(username, password, role="user"):
     """
     Register a new user.
+    Role defaults to 'user'. For 'admin', UserManager enforces password '12345'.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_register_user (username={username})")
-    return _db.users.register_user(username, password)
+    logger.info(f"API call: api_register_user (username={username}, role={role})")
+    return _db.users.register_user(username, password, role)
 
 def api_login_user(username, password):
     """
@@ -67,6 +73,7 @@ def api_login_user(username, password):
     logger.info(f"API call: api_login_user (username={username})")
     return _db.users.login_user(username, password)
 
+# Optional high-level APIs for user management (not required by current tests)
 def api_change_password(user_id, old_password, new_password):
     logger.info(f"API call: api_change_password (user_id={user_id})")
     return _db.users.change_password(user_id, old_password, new_password)
@@ -161,15 +168,17 @@ def api_add_transaction(from_user_id, to_user_id, type_, amount, date, descripti
     logger.info(f"API call: api_add_transaction (from_user_id={from_user_id}, to_user_id={to_user_id}, type={type_}, amount={amount}, date={date}, description={description}, contact_id={contact_id})")
     return _db.transactions.add_transaction(from_user_id, to_user_id, type_, amount, date, description, contact_id)
 
-def api_get_transactions(user_id, as_sender=True):
+def api_get_transactions(user_id, as_sender=True, is_admin=False):
     """
     List transactions for the user.
-    If as_sender is True, returns transactions sent by the user.
-    If False, returns transactions received by the user.
+    If is_admin is True, returns all transactions in the system.
+    Otherwise:
+      - If as_sender is True, returns transactions sent by the user.
+      - If False, returns transactions received by the user.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_get_transactions (user_id={user_id}, as_sender={as_sender})")
-    return _db.transactions.get_transactions(user_id, as_sender)
+    logger.info(f"API call: api_get_transactions (user_id={user_id}, as_sender={as_sender}, is_admin={is_admin})")
+    return _db.transactions.get_transactions(user_id, as_sender, is_admin)
 
 def api_delete_transaction(transaction_id, user_id):
     """
