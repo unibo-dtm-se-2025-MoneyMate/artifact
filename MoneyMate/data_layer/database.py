@@ -45,6 +45,14 @@ def init_db(db_path=DB_PATH):
                     description TEXT,
                     FOREIGN KEY(contact_id) REFERENCES contacts(id)
                 )""")
+            # --- Add users table creation here ---
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL
+                )
+            """)
             conn.commit()
             logger.info("Database tables created and initialization committed.")
     except Exception as e:
