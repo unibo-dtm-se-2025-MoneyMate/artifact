@@ -4,8 +4,8 @@ import pytest
 from MoneyMate.data_layer.api import (
     api_list_tables, api_add_expense, api_get_expenses,
     api_add_contact, api_get_contacts, api_add_transaction,
-    api_get_transactions, api_get_contact_balance,
-    set_db_path
+    api_get_transactions, api_get_user_balance,
+    set_db_path, api_register_user, api_login_user
 )
 from MoneyMate.data_layer.manager import DatabaseManager
 
@@ -18,8 +18,8 @@ def setup_module(module):
     """
     if os.path.exists(TEST_DB):
         os.remove(TEST_DB)
-    DatabaseManager(TEST_DB)  # Initialize DB schema
-    set_db_path(TEST_DB)      # Set the database used by the API
+    DatabaseManager(TEST_DB)
+    set_db_path(TEST_DB)
 
 def teardown_module(module):
     """
@@ -31,56 +31,76 @@ def teardown_module(module):
     if os.path.exists(TEST_DB):
         os.remove(TEST_DB)
 
+def _get_test_user():
+    # Ensure a test user exists and return user_id
+    res = api_register_user("apitestuser", "pw")
+    if not res["success"] and "already exists" in str(res["error"]).lower():
+        res = api_login_user("apitestuser", "pw")
+    assert res["success"]
+    return res["data"]["user_id"]
+
 def test_api_add_and_get_expense():
     """
     Add a new expense using the API and verify it can be retrieved.
-    Checks that the expense API correctly adds and lists expenses.
+    Checks that the expense API correctly adds and lists expenses for the user.
     """
-    res = api_add_expense("Test", 5, "2025-08-19", "Food")
+    user_id = _get_test_user()
+    res = api_add_expense("Test", 5, "2025-08-19", "Food", user_id)
     assert isinstance(res, dict)
     assert res["success"]
-    res_get = api_get_expenses()
+    res_get = api_get_expenses(user_id)
     assert isinstance(res_get, dict)
     assert any(e["title"] == "Test" for e in res_get["data"])
 
 def test_api_add_and_get_contact():
     """
     Add a new contact using the API and verify it can be retrieved.
-    Checks that the contact API correctly adds and lists contacts.
+    Checks that the contact API correctly adds and lists contacts for the user.
     """
-    res = api_add_contact("Mario")
+    user_id = _get_test_user()
+    res = api_add_contact("Mario", user_id)
     assert isinstance(res, dict)
     assert res["success"]
-    res_get = api_get_contacts()
+    res_get = api_get_contacts(user_id)
     assert isinstance(res_get, dict)
     assert any(c["name"] == "Mario" for c in res_get["data"])
 
 def test_api_add_transaction_and_balance():
     """
-    Add a contact, assign two transactions (credit and debit), and verify the balance.
+    Add two users, create a transaction from one to the other, and verify the balances.
     Tests the transaction API and balance calculation logic.
     """
-    contact = api_add_contact("Giulia")
-    cid = api_get_contacts()["data"][0]["id"]
-    api_add_transaction(cid, "credit", 50, "2025-08-19", "Loan")
-    api_add_transaction(cid, "debit", 20, "2025-08-19", "Repayment")
-    saldo = api_get_contact_balance(cid)
-    assert isinstance(saldo, dict)
-    assert saldo["success"]
-    assert saldo["data"] == 30
+    from_id = _get_test_user()
+    res2 = api_register_user("apitestuser2", "pw")
+    if not res2["success"]:
+        res2 = api_login_user("apitestuser2", "pw")
+    to_id = res2["data"]["user_id"]
+
+    # Add transaction from from_id to to_id
+    api_add_transaction(from_id, to_id, "credit", 50, "2025-08-19", "Loan")
+    api_add_transaction(from_id, to_id, "debit", 20, "2025-08-19", "Repayment")
+    saldo_sender = api_get_user_balance(from_id)
+    saldo_receiver = api_get_user_balance(to_id)
+    assert isinstance(saldo_sender, dict) and saldo_sender["success"]
+    assert isinstance(saldo_receiver, dict) and saldo_receiver["success"]
+    # Sender balance: -20 (sent debit), +50 (sent credit)
+    # Receiver balance: +20 (received debit), +50 (received credit)
+    assert saldo_sender["data"] == 30
+    assert saldo_receiver["data"] == 70
 
 def test_api_response_format():
     """
     Test that all main API functions return a dictionary with 'success', 'error', and 'data' keys.
     Ensures API contract is always respected.
     """
+    user_id = _get_test_user()
     funcs = [
-        lambda: api_add_expense("Contract", 1, "2025-08-19", "Food"),
-        api_get_expenses,
-        lambda: api_add_contact("TestFormat"),
-        api_get_contacts,
-        lambda: api_add_transaction(1, "credit", 5, "2025-08-19", "Salary"),
-        lambda: api_get_contact_balance(1),
+        lambda: api_add_expense("Contract", 1, "2025-08-19", "Food", user_id),
+        lambda: api_get_expenses(user_id),
+        lambda: api_add_contact("TestFormat", user_id),
+        lambda: api_get_contacts(user_id),
+        lambda: api_add_transaction(user_id, user_id, "credit", 5, "2025-08-19", "Salary"),
+        lambda: api_get_user_balance(user_id),
         api_list_tables,
     ]
     for func in funcs:
@@ -92,7 +112,8 @@ def test_api_add_expense_invalid():
     """
     Test that adding an expense with missing title fails and returns an appropriate error.
     """
-    res = api_add_expense("", 5, "2025-08-19", "Food")
+    user_id = _get_test_user()
+    res = api_add_expense("", 5, "2025-08-19", "Food", user_id)
     assert isinstance(res, dict)
     assert not res["success"]
     assert "title" in str(res["error"]).lower()
