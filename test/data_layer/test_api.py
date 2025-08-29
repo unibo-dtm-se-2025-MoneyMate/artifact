@@ -261,6 +261,24 @@ def test_api_net_balance_and_breakdown():
     assert b2["net"] == 50
     assert b2["legacy"] == 30
 
+def test_api_get_transactions_received():
+    """
+    Verify that api_get_transactions(as_sender=False) returns only transactions received by the user.
+    """
+    u1 = _ensure_user("trx_recv_u1", "pw")
+    u2 = _ensure_user("trx_recv_u2", "pw")
+
+    # Two directions
+    api_add_transaction(u1, u2, "credit", 10, "2025-08-19", "U1->U2")
+    api_add_transaction(u2, u1, "debit", 5, "2025-08-19", "U2->U1")
+
+    received = api_get_transactions(u1, as_sender=False)
+    assert received["success"]
+    assert len(received["data"]) >= 1
+    assert all(t["to_user_id"] == u1 for t in received["data"])
+    # Ensure the sent transaction is not present
+    assert all(t["description"] != "U1->U2" for t in received["data"])
+
 def test_api_health_returns_schema_version():
     """
     Verify that api_health returns the current schema_version as an integer.
