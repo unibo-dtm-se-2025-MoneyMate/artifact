@@ -142,30 +142,123 @@ class TransactionsManager:
 
     def get_user_balance(self, user_id):
         """
-        Calculates the balance for a user.
-        Semantics: balance = credits RECEIVED (to_user_id=user AND type='credit') - debits SENT (from_user_id=user AND type='debit').
-        This definition aligns with typical wallet logic for GUI displays.
+        LEGACY semantics (kept for backward compatibility and tests):
+        Calculates balance = total credit − total debit across ALL transactions
+        where the user appears either as sender or receiver.
+        """
+        CREDIT = "credit"
+        DEBIT = "debit"
+
+        try:
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                # Sum all credits and debits where user is sender or receiver
+                cursor.execute(
+                    """
+                    SELECT type, SUM(amount) FROM transactions
+                    WHERE (from_user_id = ? OR to_user_id = ?)
+                    GROUP BY type
+                    """,
+                    (user_id, user_id)
+                )
+                results = cursor.fetchall()
+
+            total_credit = 0
+            total_debit = 0
+
+            for transaction_type, total_amount in results:
+                if transaction_type == CREDIT:
+                    total_credit += total_amount
+                elif transaction_type == DEBIT:
+                    total_debit += total_amount
+                else:
+                    logger.warning(f"Unknown transaction type '{transaction_type}' for user ID {user_id}")
+
+            balance = total_credit - total_debit
+
+            logger.info(f"(LEGACY) Calculated balance for user ID {user_id}: {balance} (credit={total_credit}, debit={total_debit})")
+            return self.dict_response(True, data=balance)
+        except Exception as e:
+            error_msg = f"Error calculating balance for user ID {user_id}: {str(e)}"
+            logger.error(error_msg)
+            return self.dict_response(False, error_msg)
+
+    def get_user_net_balance(self, user_id):
+        """
+        NET semantics (recommended for GUI):
+        balance_net = credits_received (to_user_id=user AND type='credit')
+                       - debits_sent (from_user_id=user AND type='debit')
+        This avoids symmetry between sender and receiver on the same transaction.
         """
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
-                # Credits received
                 cursor.execute(
-                    "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE to_user_id = ? AND type = 'credit'",
-                    (user_id,)
+                    """
+                    SELECT
+                        COALESCE(SUM(CASE WHEN to_user_id = ? AND type = 'credit' THEN amount ELSE 0 END), 0) AS credits_received,
+                        COALESCE(SUM(CASE WHEN from_user_id = ? AND type = 'debit' THEN amount ELSE 0 END), 0) AS debits_sent
+                    FROM transactions
+                    """,
+                    (user_id, user_id)
                 )
-                credits_received = cursor.fetchone()[0] or 0
-                # Debits sent
-                cursor.execute(
-                    "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE from_user_id = ? AND type = 'debit'",
-                    (user_id,)
-                )
-                debits_sent = cursor.fetchone()[0] or 0
+                row = cursor.fetchone()
+                credits_received = row[0] or 0
+                debits_sent = row[1] or 0
 
-            balance = credits_received - debits_sent
-            logger.info(f"Calculated balance for user ID {user_id}: {balance} (credits_received={credits_received}, debits_sent={debits_sent})")
-            return self.dict_response(True, data=balance)
+            balance_net = credits_received - debits_sent
+            logger.info(f"(NET) Calculated net balance for user ID {user_id}: {balance_net} (credits_received={credits_received}, debits_sent={debits_sent})")
+            return self.dict_response(True, data=balance_net)
         except Exception as e:
-            error_msg = f"Error calculating balance for user ID {user_id}: {str(e)}"
+            error_msg = f"Error calculating net balance for user ID {user_id}: {str(e)}"
+            logger.error(error_msg)
+            return self.dict_response(False, error_msg)
+
+    def get_user_balance_breakdown(self, user_id):
+        """
+        Detailed breakdown for GUI analytics:
+        Returns a dict with:
+        - credits_received
+        - debits_sent
+        - credits_sent
+        - debits_received
+        - net (credits_received - debits_sent)
+        - legacy ((credits_received + credits_sent) - (debits_sent + debits_received))
+        """
+        try:
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT
+                        COALESCE(SUM(CASE WHEN to_user_id = ? AND type = 'credit' THEN amount ELSE 0 END), 0) AS credits_received,
+                        COALESCE(SUM(CASE WHEN from_user_id = ? AND type = 'debit' THEN amount ELSE 0 END), 0) AS debits_sent,
+                        COALESCE(SUM(CASE WHEN from_user_id = ? AND type = 'credit' THEN amount ELSE 0 END), 0) AS credits_sent,
+                        COALESCE(SUM(CASE WHEN to_user_id = ? AND type = 'debit' THEN amount ELSE 0 END), 0) AS debits_received
+                    FROM transactions
+                    """,
+                    (user_id, user_id, user_id, user_id)
+                )
+                row = cursor.fetchone()
+                credits_received = row[0] or 0
+                debits_sent = row[1] or 0
+                credits_sent = row[2] or 0
+                debits_received = row[3] or 0
+
+            net = credits_received - debits_sent
+            legacy = (credits_received + credits_sent) - (debits_sent + debits_received)
+
+            breakdown = {
+                "credits_received": credits_received,
+                "debits_sent": debits_sent,
+                "credits_sent": credits_sent,
+                "debits_received": debits_received,
+                "net": net,
+                "legacy": legacy,
+            }
+            logger.info(f"(BREAKDOWN) Balance breakdown for user ID {user_id}: {breakdown}")
+            return self.dict_response(True, data=breakdown)
+        except Exception as e:
+            error_msg = f"Error calculating balance breakdown for user ID {user_id}: {str(e)}"
             logger.error(error_msg)
             return self.dict_response(False, error_msg)
