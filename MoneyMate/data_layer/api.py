@@ -13,6 +13,7 @@ Extended:
 - User roles (admin/user): admin can view all transactions
 - Admin registration policy: enforced in UserManager (password '12345')
 - API now forwards 'role' to user registration and 'is_admin' to transactions listing
+- Optional category_id for expenses (backward compatible)
 """
 
 from MoneyMate.data_layer.manager import DatabaseManager
@@ -92,13 +93,17 @@ def api_set_user_role(admin_user_id, target_user_id, new_role):
 
 # --- EXPENSES API ---
 
-def api_add_expense(title, price, date, category, user_id):
+def api_add_expense(title, price, date, category, user_id, category_id=None):
     """
     Add a new expense for the specified user.
+    Optional category_id (FK to categories) is supported if present in schema.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_add_expense (title={title}, price={price}, date={date}, category={category}, user_id={user_id})")
-    return _db.expenses.add_expense(title, price, date, category, user_id)
+    logger.info(
+        f"API call: api_add_expense (title={title}, price={price}, date={date}, "
+        f"category={category}, user_id={user_id}, category_id={category_id})"
+    )
+    return _db.expenses.add_expense(title, price, date, category, user_id, category_id=category_id)
 
 def api_get_expenses(user_id):
     """
@@ -165,7 +170,10 @@ def api_add_transaction(from_user_id, to_user_id, type_, amount, date, descripti
     Add a new transaction between users.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_add_transaction (from_user_id={from_user_id}, to_user_id={to_user_id}, type={type_}, amount={amount}, date={date}, description={description}, contact_id={contact_id})")
+    logger.info(
+        f"API call: api_add_transaction (from_user_id={from_user_id}, to_user_id={to_user_id}, "
+        f"type={type_}, amount={amount}, date={date}, description={description}, contact_id={contact_id})"
+    )
     return _db.transactions.add_transaction(from_user_id, to_user_id, type_, amount, date, description, contact_id)
 
 def api_get_transactions(user_id, as_sender=True, is_admin=False):
