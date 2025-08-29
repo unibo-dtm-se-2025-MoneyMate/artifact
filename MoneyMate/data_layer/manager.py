@@ -2,8 +2,8 @@
 DatabaseManager: Central orchestrator for entity managers in MoneyMate.
 
 This class instantiates and exposes managers for expenses, contacts, transactions, and users,
-ensuring modularity, single responsibility, and testability. All data operations should be accessed 
-through the appropriate manager instance.
+ensuring modularity, single responsibility, dependency injection, configurability, error handling, resource management, and testability.
+All data operations should be accessed through the appropriate manager instance.
 
 Design principles:
 - Each manager (ExpensesManager, ContactsManager, TransactionsManager, UserManager) is isolated in its own file.
@@ -19,13 +19,17 @@ Usage:
     db.contacts.get_contacts()
     db.transactions.get_contact_balance(...)
     db.users.register_user(...)
+    db.users.change_password(...)
+    db.users.reset_password(...)
+    db.users.get_user_role(...)
+    db.users.set_user_role(...)
 """
 
 from .database import DB_PATH, list_tables, init_db
 from .expenses import ExpensesManager
 from .contacts import ContactsManager
 from .transactions import TransactionsManager
-from .usermanager import UserManager  # <-- Added UserManager import
+from .usermanager import UserManager
 import logging
 import MoneyMate.data_layer.logging_config  # Ensure global logging configuration
 
@@ -44,8 +48,8 @@ class DatabaseManager:
         self.expenses = None
         self.contacts = None
         self.transactions = None
-        self.users = None  # <-- Release users manager
-    
+        self.users = None
+
     def __init__(self, db_path=DB_PATH):
         # Initialize the database and managers
         logger.info(f"Initializing DatabaseManager with db_path: {db_path}")
@@ -53,7 +57,7 @@ class DatabaseManager:
         self.expenses = ExpensesManager(db_path)
         self.contacts = ContactsManager(db_path)
         self.transactions = TransactionsManager(db_path, self.contacts)
-        self.users = UserManager(db_path)  # <-- Initialize users manager
+        self.users = UserManager(db_path)
 
     def _create_managers(self, db_path):
         """
@@ -65,7 +69,7 @@ class DatabaseManager:
         self.expenses = ExpensesManager(db_path)
         self.contacts = ContactsManager(db_path)
         self.transactions = TransactionsManager(db_path, self.contacts)
-        self.users = UserManager(db_path)  # <-- Recreate users manager
+        self.users = UserManager(db_path)
 
     def list_tables(self):
         """
