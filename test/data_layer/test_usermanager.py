@@ -7,6 +7,9 @@ This test file covers:
 - Successful user authentication
 - Failed authentication (wrong password)
 - Response format (success, error, data fields)
+- Admin registration and forced password
+- Role logic: user/admin/upgrade
+- Change and reset password (role check)
 """
 
 import pytest
@@ -38,29 +41,85 @@ def teardown_module(module):
         raise PermissionError(f"Unable to delete test database file: {TEST_DB}")
 
 def test_register_and_login_user():
+    """Test registration and authentication for a normal user."""
     db = DatabaseManager(TEST_DB)
-    
-    # Register a new user
     res = db.users.register_user("testuser", "password123")
     assert res["success"], "Registration should succeed: {}".format(res)
     user_id = res["data"]["user_id"]
     assert isinstance(user_id, int) and user_id > 0
 
-    # Login with correct credentials
     res_login = db.users.login_user("testuser", "password123")
     assert res_login["success"], "Login should succeed: {}".format(res_login)
     assert res_login["data"]["user_id"] == user_id
 
-    # Login with incorrect password
     res_login_fail = db.users.login_user("testuser", "wrongpassword")
     assert not res_login_fail["success"], "Login should fail with wrong password"
     assert res_login_fail["error"] == "Invalid credentials"
 
-    # Register with duplicate username
     res_dup = db.users.register_user("testuser", "password123")
     assert not res_dup["success"], "Duplicate registration should fail"
     assert "already exists" in res_dup["error"]
 
-    # Close DB before teardown to release file (especially on Windows)
+    # Response format always contains keys
+    assert all(k in res for k in ("success", "error", "data"))
+
     db.close()
-    gc.collect()  # Force closing of any remaining file handles
+    gc.collect()
+
+def test_admin_registration_and_role():
+    """Admin registration requires password '12345' and sets role to admin."""
+    db = DatabaseManager(TEST_DB)
+    # Try invalid admin password
+    res_invalid = db.users.register_user("adminuser1", "wrong", role="admin")
+    assert not res_invalid["success"]
+    assert "admin password" in res_invalid["error"].lower()
+
+    # Valid admin registration
+    res_admin = db.users.register_user("adminuser", "12345", role="admin")
+    assert res_admin["success"]
+    admin_id = res_admin["data"]["user_id"]
+
+    # Check role
+    role_res = db.users.get_user_role(admin_id)
+    assert role_res["success"]
+    assert role_res["data"]["role"] == "admin"
+
+    # Upgrade normal user to admin
+    res_user = db.users.register_user("normaluser", "pw")
+    assert res_user["success"]
+    user_id = res_user["data"]["user_id"]
+    role_set = db.users.set_user_role(admin_id, user_id, "admin")
+    assert role_set["success"]
+    assert db.users.get_user_role(user_id)["data"]["role"] == "admin"
+
+    db.close()
+    gc.collect()
+
+def test_change_and_reset_password():
+    """Test password change and reset (admin required for reset)."""
+    db = DatabaseManager(TEST_DB)
+    # Register admin and normal user
+    res_adm = db.users.register_user("adm", "12345", role="admin")
+    res_usr = db.users.register_user("usr", "pw")
+    admin_id = res_adm["data"]["user_id"]
+    user_id = res_usr["data"]["user_id"]
+
+    # Change password for user
+    change = db.users.change_password(user_id, "pw", "newpw")
+    assert change["success"]
+    login_new = db.users.login_user("usr", "newpw")
+    assert login_new["success"]
+
+    # Reset password as admin
+    reset = db.users.reset_password(admin_id, user_id, "resetpw")
+    assert reset["success"]
+    login_reset = db.users.login_user("usr", "resetpw")
+    assert login_reset["success"]
+
+    # Non-admin cannot reset
+    notadm_reset = db.users.reset_password(user_id, admin_id, "failpw")
+    assert not notadm_reset["success"]
+    assert "admin privileges" in notadm_reset["error"].lower()
+
+    db.close()
+    gc.collect()
