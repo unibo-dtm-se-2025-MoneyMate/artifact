@@ -8,21 +8,19 @@ logger = logging.getLogger(__name__)
 class ExpensesManager:
     """
     Manager class for handling expense-related database operations.
-    Each method maintains the original logic and comments for clarity and testing.
+    Now supports per-user expense tracking.
     """
 
     def __init__(self, db_path):
         self.db_path = db_path
 
     def dict_response(self, success, error=None, data=None):
-        """Return a standardized dictionary for all API responses."""
         return {"success": success, "error": error, "data": data}
 
     # --- CRUD EXPENSES ---
-    def add_expense(self, title, price, date, category):
+    def add_expense(self, title, price, date, category, user_id):
         """
-        Adds a new expense after validation.
-        Uses a context manager for DB connection for safe resource handling.
+        Adds a new expense after validation. Associates expense with user_id.
         """
         err = validate_expense(title, price, date, category)
         if err:
@@ -32,87 +30,86 @@ class ExpensesManager:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "INSERT INTO expenses (title, price, date, category) VALUES (?, ?, ?, ?)",
-                    (title, price, date, category)
+                    "INSERT INTO expenses (title, price, date, category, user_id) VALUES (?, ?, ?, ?, ?)",
+                    (title, price, date, category, user_id)
                 )
                 conn.commit()
-            logger.info(f"Expense '{title}' added successfully.")
+            logger.info(f"Expense '{title}' added for user {user_id}.")
             return self.dict_response(True)
         except Exception as e:
             logger.error(f"Error adding expense '{title}': {e}")
             return self.dict_response(False, str(e))
 
-    def get_expenses(self):
+    def get_expenses(self, user_id):
         """
-        Returns all expenses as a list of dicts.
-        Uses a context manager for DB connection.
-        """
-        try:
-            with get_connection(self.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT id, title, price, date, category FROM expenses")
-                rows = cursor.fetchall()
-            expenses = [
-                {"id": r[0], "title": r[1], "price": r[2], "date": r[3], "category": r[4]}
-                for r in rows
-            ]
-            logger.info(f"Retrieved {len(expenses)} expenses from the database.")
-            return self.dict_response(True, data=expenses)
-        except Exception as e:
-            logger.error(f"Error retrieving expenses: {e}")
-            return self.dict_response(False, str(e))
-
-    def search_expenses(self, query):
-        """
-        Searches expenses by title or category.
-        Uses a context manager for DB connection.
+        Returns all expenses for a specific user as a list of dicts.
         """
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "SELECT id, title, price, date, category FROM expenses WHERE title LIKE ? OR category LIKE ?",
-                    (f"%{query}%", f"%{query}%")
+                    "SELECT id, title, price, date, category FROM expenses WHERE user_id = ?",
+                    (user_id,)
                 )
                 rows = cursor.fetchall()
             expenses = [
                 {"id": r[0], "title": r[1], "price": r[2], "date": r[3], "category": r[4]}
                 for r in rows
             ]
-            logger.info(f"Searched expenses with query '{query}': found {len(expenses)} results.")
+            logger.info(f"Retrieved {len(expenses)} expenses for user {user_id}.")
             return self.dict_response(True, data=expenses)
         except Exception as e:
-            logger.error(f"Error searching expenses with query '{query}': {e}")
+            logger.error(f"Error retrieving expenses for user {user_id}: {e}")
             return self.dict_response(False, str(e))
 
-    def delete_expense(self, expense_id):
+    def search_expenses(self, query, user_id):
         """
-        Deletes a specific expense by ID.
-        Uses a context manager for DB connection.
+        Searches expenses by title or category, filtered by user.
         """
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
-                conn.commit()
-            logger.info(f"Deleted expense with ID {expense_id}.")
-            return self.dict_response(True)
+                cursor.execute(
+                    "SELECT id, title, price, date, category FROM expenses WHERE user_id = ? AND (title LIKE ? OR category LIKE ?)",
+                    (user_id, f"%{query}%", f"%{query}%")
+                )
+                rows = cursor.fetchall()
+            expenses = [
+                {"id": r[0], "title": r[1], "price": r[2], "date": r[3], "category": r[4]}
+                for r in rows
+            ]
+            logger.info(f"Searched expenses for user {user_id} with query '{query}': found {len(expenses)} results.")
+            return self.dict_response(True, data=expenses)
         except Exception as e:
-            logger.error(f"Error deleting expense with ID {expense_id}: {e}")
+            logger.error(f"Error searching expenses for user {user_id} with query '{query}': {e}")
             return self.dict_response(False, str(e))
 
-    def clear_expenses(self):
+    def delete_expense(self, expense_id, user_id):
         """
-        Deletes all expenses from the table.
-        Uses a context manager for DB connection.
+        Deletes a specific expense by ID, only if it belongs to the user.
         """
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM expenses")
+                cursor.execute("DELETE FROM expenses WHERE id = ? AND user_id = ?", (expense_id, user_id))
                 conn.commit()
-            logger.info("Cleared all expenses from the database.")
+            logger.info(f"Deleted expense with ID {expense_id} for user {user_id}.")
             return self.dict_response(True)
         except Exception as e:
-            logger.error(f"Error clearing expenses: {e}")
+            logger.error(f"Error deleting expense with ID {expense_id} for user {user_id}: {e}")
+            return self.dict_response(False, str(e))
+
+    def clear_expenses(self, user_id):
+        """
+        Deletes all expenses from the table for a user.
+        """
+        try:
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("DELETE FROM expenses WHERE user_id = ?", (user_id,))
+                conn.commit()
+            logger.info(f"Cleared all expenses for user {user_id}.")
+            return self.dict_response(True)
+        except Exception as e:
+            logger.error(f"Error clearing expenses for user {user_id}: {e}")
             return self.dict_response(False, str(e))
