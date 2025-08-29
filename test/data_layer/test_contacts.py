@@ -1,6 +1,7 @@
 import sys
 import os
 import gc
+import time
 import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from MoneyMate.data_layer.manager import DatabaseManager
@@ -23,8 +24,15 @@ def db():
     if hasattr(dbm, "close"):
         dbm.close()
     gc.collect()
+    for _ in range(10):
+        try:
+            if os.path.exists(TEST_DB):
+                os.remove(TEST_DB)
+            break
+        except PermissionError:
+            time.sleep(0.2)
     if os.path.exists(TEST_DB):
-        os.remove(TEST_DB)
+        raise PermissionError(f"Unable to delete test database file: {TEST_DB}")
 
 def test_add_contact_valid(db):
     """
