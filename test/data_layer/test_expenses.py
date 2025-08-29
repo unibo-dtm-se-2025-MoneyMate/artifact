@@ -1,6 +1,7 @@
 import sys
 import os
 import gc
+import time
 import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from MoneyMate.data_layer.manager import DatabaseManager
@@ -23,8 +24,15 @@ def db():
     if hasattr(dbm, "close"):
         dbm.close()
     gc.collect()
+    for _ in range(10):
+        try:
+            if os.path.exists(TEST_DB):
+                os.remove(TEST_DB)
+            break
+        except PermissionError:
+            time.sleep(0.2)
     if os.path.exists(TEST_DB):
-        os.remove(TEST_DB)
+        raise PermissionError(f"Unable to delete test database file: {TEST_DB}")
 
 def test_tables_exist(db):
     """
@@ -147,3 +155,21 @@ def test_add_expense_with_category_id_invalid_user(db):
     res = db.expenses.add_expense("WrongCat", 9.0, "2025-08-19", "Misc", db._test_user_id, category_id=other_cat_id)
     assert not res["success"]
     assert "invalid category" in res["error"].lower()
+
+def test_search_includes_category_id_when_present(db):
+    """
+    Ensure search_expenses returns category_id when the schema supports it and the expense has it.
+    """
+    # Create category and expense with category_id
+    with get_connection(TEST_DB) as conn:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO categories (user_id, name) VALUES (?, ?)", (db._test_user_id, "SearchCat"))
+        cat_id = cur.lastrowid
+        conn.commit()
+    db.expenses.add_expense("Searchable", 5.0, "2025-08-19", "Misc", db._test_user_id, category_id=cat_id)
+
+    res = db.expenses.search_expenses("Searchable", db._test_user_id)
+    assert res["success"]
+    assert res["data"], "Expected at least one result"
+    item = next(e for e in res["data"] if e["title"] == "Searchable")
+    assert "category_id" in item and item["category_id"] == cat_id
