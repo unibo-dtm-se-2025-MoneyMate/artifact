@@ -29,7 +29,8 @@ def test_tables_exist(db):
     """
     tables = db.list_tables()["data"]
     tables = [t for t in tables if t != "sqlite_sequence"]
-    assert set(tables) == {"expenses", "contacts", "transactions"}
+    # Aggiorna l'assert includendo la tabella users
+    assert set(tables) == {"expenses", "contacts", "transactions", "users"}
 
 def test_add_expense_valid(db):
     """
