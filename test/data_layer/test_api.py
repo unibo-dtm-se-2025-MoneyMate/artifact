@@ -39,6 +39,28 @@ def _get_test_user():
     assert res["success"]
     return res["data"]["user_id"]
 
+# --- Helpers added to cover new admin/role features without touching existing tests ---
+
+def _ensure_user(username, password, role="user"):
+    """
+    Ensure a user (optionally with role) exists; if already present, login.
+    Returns user_id.
+    """
+    res = api_register_user(username, password, role=role)
+    if not res["success"] and "already exists" in str(res["error"]).lower():
+        res = api_login_user(username, password)
+    assert res["success"]
+    return res["data"]["user_id"]
+
+def _get_admin_user(username="adminuser"):
+    """
+    Ensure an admin user exists with the enforced password '12345'.
+    Returns admin user_id.
+    """
+    return _ensure_user(username, "12345", role="admin")
+
+# --- Existing tests (UNCHANGED) ---
+
 def test_api_add_and_get_expense():
     """
     Add a new expense using the API and verify it can be retrieved.
@@ -118,3 +140,39 @@ def test_api_add_expense_invalid():
     assert isinstance(res, dict)
     assert not res["success"]
     assert "title" in str(res["error"]).lower()
+
+# --- New tests added for admin/role features (do not replace existing ones) ---
+
+def test_api_admin_registration_and_transactions():
+    """
+    Admin registration (password must be '12345') and ability to view all transactions of all users.
+    """
+    admin_id = _get_admin_user("admin_api")
+    # Create two distinct normal users for admin visibility test
+    u1 = _ensure_user("apiu1", "pw", role="user")
+    u2 = _ensure_user("apiu2", "pw", role="user")
+
+    # Add transactions in both directions
+    api_add_transaction(u1, u2, "credit", 50, "2025-08-19", "Loan")
+    api_add_transaction(u2, u1, "debit", 20, "2025-08-19", "Repayment")
+
+    # Admin gets all transactions
+    tr_all = api_get_transactions(admin_id, is_admin=True)
+    assert isinstance(tr_all, dict) and tr_all["success"]
+    assert len(tr_all["data"]) >= 2
+    senders = {t["from_user_id"] for t in tr_all["data"]}
+    assert u1 in senders and u2 in senders
+
+    # Normal user gets only own sent transactions by default (as_sender=True)
+    tr_user = api_get_transactions(u1)
+    assert tr_user["success"]
+    assert all(t["from_user_id"] == u1 for t in tr_user["data"])
+
+def test_api_admin_wrong_password():
+    """
+    Test that admin registration fails with wrong password (must be exactly '12345').
+    """
+    res = api_register_user("wrongadmin_api", "pw", role="admin")
+    assert isinstance(res, dict)
+    assert not res["success"]
+    assert "admin password" in str(res["error"]).lower()
