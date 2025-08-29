@@ -33,6 +33,11 @@ class TransactionsManager:
         if not self._user_exists(to_user_id):
             logger.warning(f"Transaction validation failed: to_user_id {to_user_id} does not exist.")
             return self.dict_response(False, "Receiver user does not exist")
+        # Enforce sender != receiver (DB CHECK not easily alterable post-creation)
+        if from_user_id == to_user_id:
+            logger.warning(f"Transaction validation failed: from_user_id and to_user_id are the same ({from_user_id}).")
+            return self.dict_response(False, "Sender and receiver must be different")
+        # Contact cross-validation: contact must belong to sender (by design)
         if contact_id and not self.contacts_manager.contact_exists(contact_id, from_user_id):
             logger.warning(f"Transaction validation failed: contact_id {contact_id} does not exist for user {from_user_id}.")
             return self.dict_response(False, "Contact does not exist")
@@ -137,40 +142,28 @@ class TransactionsManager:
 
     def get_user_balance(self, user_id):
         """
-        Calculates the balance for a user based on transactions (credit received, debit sent).
-        Note: The function sums credit and debit for both sent and received transactions.
+        Calculates the balance for a user.
+        Semantics: balance = credits RECEIVED (to_user_id=user AND type='credit') - debits SENT (from_user_id=user AND type='debit').
+        This definition aligns with typical wallet logic for GUI displays.
         """
-        CREDIT = "credit"
-        DEBIT = "debit"
-
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
-                # Sum all credits and debits where user is sender or receiver
+                # Credits received
                 cursor.execute(
-                    """
-                    SELECT type, SUM(amount) FROM transactions
-                    WHERE (from_user_id = ? OR to_user_id = ?)
-                    GROUP BY type
-                    """,
-                    (user_id, user_id)
+                    "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE to_user_id = ? AND type = 'credit'",
+                    (user_id,)
                 )
-                results = cursor.fetchall()
+                credits_received = cursor.fetchone()[0] or 0
+                # Debits sent
+                cursor.execute(
+                    "SELECT COALESCE(SUM(amount), 0) FROM transactions WHERE from_user_id = ? AND type = 'debit'",
+                    (user_id,)
+                )
+                debits_sent = cursor.fetchone()[0] or 0
 
-            total_credit = 0
-            total_debit = 0
-
-            for transaction_type, total_amount in results:
-                if transaction_type == CREDIT:
-                    total_credit += total_amount
-                elif transaction_type == DEBIT:
-                    total_debit += total_amount
-                else:
-                    logger.warning(f"Unknown transaction type '{transaction_type}' for user ID {user_id}")
-
-            balance = total_credit - total_debit
-
-            logger.info(f"Calculated balance for user ID {user_id}: {balance} (credit={total_credit}, debit={total_debit})")
+            balance = credits_received - debits_sent
+            logger.info(f"Calculated balance for user ID {user_id}: {balance} (credits_received={credits_received}, debits_sent={debits_sent})")
             return self.dict_response(True, data=balance)
         except Exception as e:
             error_msg = f"Error calculating balance for user ID {user_id}: {str(e)}"
