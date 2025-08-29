@@ -25,8 +25,13 @@ DB_PATH = "moneymate.db"
 def get_connection(db_path: str):
     """
     Return a new SQLite connection with foreign key support enabled.
+    - Supports SQLite URI for shared in-memory DBs (e.g., file:moneymate?mode=memory&cache=shared).
     """
-    conn = sqlite3.connect(db_path)
+    # If using an SQLite connection URI, enable uri=True for proper handling.
+    if isinstance(db_path, str) and db_path.startswith("file:"):
+        conn = sqlite3.connect(db_path, uri=True)
+    else:
+        conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
 
@@ -39,6 +44,18 @@ def init_db(db_path: str) -> Dict[str, Any]:
     try:
         conn = get_connection(db_path)
         cur = conn.cursor()
+
+        # Schema versioning (basic)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS schema_version (
+                version INTEGER NOT NULL
+            );
+        """)
+        cur.execute("SELECT COUNT(*) FROM schema_version;")
+        count = cur.fetchone()[0]
+        if count == 0:
+            # Start at version 1 for initial baseline of this codebase.
+            cur.execute("INSERT INTO schema_version (version) VALUES (1);")
 
         # Core tables (order matters for FKs)
         cur.execute("""
@@ -78,6 +95,8 @@ def init_db(db_path: str) -> Dict[str, Any]:
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_user_id ON expenses(user_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);")
+        # Composite index useful for GUI filtering by user/date
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date);")
 
         # Transactions between users
         cur.execute("""
@@ -99,6 +118,10 @@ def init_db(db_path: str) -> Dict[str, Any]:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_from_user ON transactions(from_user_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_to_user ON transactions(to_user_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);")
+        # Composite indexes for common filtered/ordered views in GUI
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_from_user_date ON transactions(from_user_id, date);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_to_user_date ON transactions(to_user_id, date);")
+        # NOTE: We also enforce sender != receiver at application layer (SQLite cannot ALTER ADD CHECK easily).
 
         # Extended tables
 
@@ -226,6 +249,25 @@ def list_tables(db_path: str) -> Dict[str, Any]:
         return {"success": True, "error": None, "data": tables}
     except Exception as e:
         return {"success": False, "error": str(e), "data": []}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+def get_schema_version(db_path: str) -> Dict[str, Any]:
+    """
+    Return the current schema version (integer) if available.
+    """
+    try:
+        conn = get_connection(db_path)
+        cur = conn.cursor()
+        cur.execute("SELECT version FROM schema_version LIMIT 1;")
+        row = cur.fetchone()
+        version = row[0] if row else None
+        return {"success": True, "error": None, "data": version}
+    except Exception as e:
+        return {"success": False, "error": str(e), "data": None}
     finally:
         try:
             conn.close()
