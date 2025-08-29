@@ -5,6 +5,9 @@ Unified API interface for MoneyMate data layer, using DatabaseManager.
 This module provides high-level functions to interact with expenses,
 contacts, transactions, and users, wrapping DatabaseManager methods.
 Each function returns a standardized dictionary response.
+
+Now supports user-scoped operations for expenses, contacts, and transactions,
+including tracking transactions/credit between users.
 """
 
 from MoneyMate.data_layer.manager import DatabaseManager
@@ -66,102 +69,104 @@ def api_login_user(username, password):
 
 # --- EXPENSES API ---
 
-def api_add_expense(title, price, date, category):
+def api_add_expense(title, price, date, category, user_id):
     """
-    Add a new expense.
+    Add a new expense for the specified user.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_add_expense (title={title}, price={price}, date={date}, category={category})")
-    return _db.expenses.add_expense(title, price, date, category)
+    logger.info(f"API call: api_add_expense (title={title}, price={price}, date={date}, category={category}, user_id={user_id})")
+    return _db.expenses.add_expense(title, price, date, category, user_id)
 
-def api_get_expenses():
+def api_get_expenses(user_id):
     """
-    List all expenses.
+    List all expenses for the specified user.
     Returns: dict {success, error, data}
     """
-    logger.info("API call: api_get_expenses")
-    return _db.expenses.get_expenses()
+    logger.info(f"API call: api_get_expenses (user_id={user_id})")
+    return _db.expenses.get_expenses(user_id)
 
-def api_search_expenses(query):
+def api_search_expenses(query, user_id):
     """
-    Search expenses by title or category.
+    Search expenses by title or category for the specified user.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_search_expenses (query={query})")
-    return _db.expenses.search_expenses(query)
+    logger.info(f"API call: api_search_expenses (query={query}, user_id={user_id})")
+    return _db.expenses.search_expenses(query, user_id)
 
-def api_delete_expense(expense_id):
+def api_delete_expense(expense_id, user_id):
     """
-    Delete an expense by id.
+    Delete an expense by id for the specified user.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_delete_expense (expense_id={expense_id})")
-    return _db.expenses.delete_expense(expense_id)
+    logger.info(f"API call: api_delete_expense (expense_id={expense_id}, user_id={user_id})")
+    return _db.expenses.delete_expense(expense_id, user_id)
 
-def api_clear_expenses():
+def api_clear_expenses(user_id):
     """
-    Delete all expenses.
+    Delete all expenses for the specified user.
     Returns: dict {success, error, data}
     """
-    logger.info("API call: api_clear_expenses")
-    return _db.expenses.clear_expenses()
+    logger.info(f"API call: api_clear_expenses (user_id={user_id})")
+    return _db.expenses.clear_expenses(user_id)
 
 # --- CONTACTS API ---
 
-def api_add_contact(name):
+def api_add_contact(name, user_id):
     """
-    Add a new contact.
+    Add a new contact for the specified user.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_add_contact (name={name})")
-    return _db.contacts.add_contact(name)
+    logger.info(f"API call: api_add_contact (name={name}, user_id={user_id})")
+    return _db.contacts.add_contact(name, user_id)
 
-def api_get_contacts():
+def api_get_contacts(user_id):
     """
-    List all contacts.
+    List all contacts for the specified user.
     Returns: dict {success, error, data}
     """
-    logger.info("API call: api_get_contacts")
-    return _db.contacts.get_contacts()
+    logger.info(f"API call: api_get_contacts (user_id={user_id})")
+    return _db.contacts.get_contacts(user_id)
 
-def api_delete_contact(contact_id):
+def api_delete_contact(contact_id, user_id):
     """
-    Delete a contact by id.
+    Delete a contact by id for the specified user.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_delete_contact (contact_id={contact_id})")
-    return _db.contacts.delete_contact(contact_id)
+    logger.info(f"API call: api_delete_contact (contact_id={contact_id}, user_id={user_id})")
+    return _db.contacts.delete_contact(contact_id, user_id)
 
 # --- TRANSACTIONS API ---
 
-def api_add_transaction(contact_id, type_, amount, date, description=""):
+def api_add_transaction(from_user_id, to_user_id, type_, amount, date, description="", contact_id=None):
     """
-    Add a new transaction for a contact.
+    Add a new transaction between users.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_add_transaction (contact_id={contact_id}, type={type_}, amount={amount}, date={date}, description={description})")
-    return _db.transactions.add_transaction(contact_id, type_, amount, date, description)
+    logger.info(f"API call: api_add_transaction (from_user_id={from_user_id}, to_user_id={to_user_id}, type={type_}, amount={amount}, date={date}, description={description}, contact_id={contact_id})")
+    return _db.transactions.add_transaction(from_user_id, to_user_id, type_, amount, date, description, contact_id)
 
-def api_get_transactions(contact_id=None):
+def api_get_transactions(user_id, as_sender=True):
     """
-    List transactions. Optionally filter by contact_id.
+    List transactions for the user.
+    If as_sender is True, returns transactions sent by the user.
+    If False, returns transactions received by the user.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_get_transactions (contact_id={contact_id})")
-    return _db.transactions.get_transactions(contact_id)
+    logger.info(f"API call: api_get_transactions (user_id={user_id}, as_sender={as_sender})")
+    return _db.transactions.get_transactions(user_id, as_sender)
 
-def api_delete_transaction(transaction_id):
+def api_delete_transaction(transaction_id, user_id):
     """
-    Delete a transaction by id.
+    Delete a transaction by id if the user is the sender.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_delete_transaction (transaction_id={transaction_id})")
-    return _db.transactions.delete_transaction(transaction_id)
+    logger.info(f"API call: api_delete_transaction (transaction_id={transaction_id}, user_id={user_id})")
+    return _db.transactions.delete_transaction(transaction_id, user_id)
 
-def api_get_contact_balance(contact_id):
+def api_get_user_balance(user_id):
     """
-    Get the current balance for a given contact.
+    Get the current balance for a user, aggregating credits/debits.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_get_contact_balance (contact_id={contact_id})")
-    return _db.transactions.get_contact_balance(contact_id)
+    logger.info(f"API call: api_get_user_balance (user_id={user_id})")
+    return _db.transactions.get_user_balance(user_id)
