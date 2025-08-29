@@ -67,6 +67,22 @@ def api_login_user(username, password):
     logger.info(f"API call: api_login_user (username={username})")
     return _db.users.login_user(username, password)
 
+def api_change_password(user_id, old_password, new_password):
+    logger.info(f"API call: api_change_password (user_id={user_id})")
+    return _db.users.change_password(user_id, old_password, new_password)
+
+def api_reset_password(admin_user_id, target_user_id, new_password):
+    logger.info(f"API call: api_reset_password (admin_user_id={admin_user_id}, target_user_id={target_user_id})")
+    return _db.users.reset_password(admin_user_id, target_user_id, new_password)
+
+def api_get_user_role(user_id):
+    logger.info(f"API call: api_get_user_role (user_id={user_id})")
+    return _db.users.get_user_role(user_id)
+
+def api_set_user_role(admin_user_id, target_user_id, new_role):
+    logger.info(f"API call: api_set_user_role (admin_user_id={admin_user_id}, target_user_id={target_user_id}, new_role={new_role})")
+    return _db.users.set_user_role(admin_user_id, target_user_id, new_role)
+
 # --- EXPENSES API ---
 
 def api_add_expense(title, price, date, category, user_id):
