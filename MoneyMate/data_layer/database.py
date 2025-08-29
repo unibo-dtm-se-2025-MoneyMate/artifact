@@ -18,6 +18,7 @@ def init_db(db_path=DB_PATH):
     """
     Creates the tables if they do not exist in the SQLite database.
     Now supports multi-user expense and transaction tracking.
+    Also adds support for user roles.
     """
     try:
         with get_connection(db_path) as conn:
@@ -27,7 +28,8 @@ def init_db(db_path=DB_PATH):
                 CREATE TABLE IF NOT EXISTS users (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     username TEXT UNIQUE NOT NULL,
-                    password_hash TEXT NOT NULL
+                    password_hash TEXT NOT NULL,
+                    role TEXT NOT NULL DEFAULT 'user'
                 )
             """)
             cursor.execute("""
