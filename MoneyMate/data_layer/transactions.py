@@ -7,8 +7,7 @@ logger = logging.getLogger(__name__)
 
 class TransactionsManager:
     """
-    Manager class for handling transaction-related database operations.
-    Keeps original method logic and comments, uses ContactsManager for validation.
+    Manager for user-to-user transactions: supports tracking debiti/crediti tra utenti.
     """
 
     def __init__(self, db_path, contacts_manager):
@@ -16,93 +15,88 @@ class TransactionsManager:
         self.contacts_manager = contacts_manager
 
     def dict_response(self, success, error=None, data=None):
-        """Return a standardized dictionary for all API responses."""
         return {"success": success, "error": error, "data": data}
 
-    # --- CRUD TRANSACTIONS ---
-    def add_transaction(self, contact_id, type_, amount, date, description=""):
+    def add_transaction(self, from_user_id, to_user_id, type_, amount, date, description="", contact_id=None):
         """
-        Adds a new transaction for the specified contact.
-        Validates the input before inserting the transaction into the database.
-        Returns a standardized response indicating success or failure.
+        Adds a new transaction between users.
+        Validates input and ensures users are different (if needed).
         """
         err = validate_transaction(type_, amount, date)
         if err:
-            logger.warning(f"Validation failed for transaction (contact_id={contact_id}, type={type_}, amount={amount}): {err}")
+            logger.warning(f"Validation failed for transaction (from_user_id={from_user_id}, to_user_id={to_user_id}, type={type_}, amount={amount}): {err}")
             return self.dict_response(False, err)
-        # Check that the contact_id exists (required by test)
-        if not self.contacts_manager.contact_exists(contact_id):
-            logger.warning(f"Transaction validation failed: contact_id {contact_id} does not exist.")
+        if contact_id and not self.contacts_manager.contact_exists(contact_id, from_user_id):
+            logger.warning(f"Transaction validation failed: contact_id {contact_id} does not exist for user {from_user_id}.")
             return self.dict_response(False, "Contact does not exist")
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
-                    "INSERT INTO transactions (contact_id, type, amount, date, description) VALUES (?, ?, ?, ?, ?)",
-                    (contact_id, type_, amount, date, description)
+                    "INSERT INTO transactions (from_user_id, to_user_id, type, amount, date, description, contact_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (from_user_id, to_user_id, type_, amount, date, description, contact_id)
                 )
                 conn.commit()
-            logger.info(f"Transaction for contact_id={contact_id} of type '{type_}' and amount {amount} added successfully.")
+            logger.info(f"Transaction from user {from_user_id} to user {to_user_id} of type '{type_}' and amount {amount} added successfully.")
             return self.dict_response(True)
         except Exception as e:
-            error_msg = f"Error adding transaction for contact ID {contact_id}: {str(e)}"
+            error_msg = f"Error adding transaction from user {from_user_id} to user {to_user_id}: {str(e)}"
             logger.error(error_msg)
             return self.dict_response(False, error_msg)
 
-    def get_transactions(self, contact_id=None):
+    def get_transactions(self, user_id, as_sender=True):
         """
         Retrieves transactions from the database.
-        If a contact_id is specified, only transactions for that contact are returned.
-        Otherwise, all transactions are returned.
-        Returns a standardized response with the transaction data or an error message.
+        If as_sender is True, returns those WHERE from_user_id=user_id.
+        If False, returns those WHERE to_user_id=user_id.
         """
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
-                if contact_id:
-                    cursor.execute("SELECT id, contact_id, type, amount, date, description FROM transactions WHERE contact_id = ?", (contact_id,))
+                if as_sender:
+                    cursor.execute("SELECT id, from_user_id, to_user_id, type, amount, date, description, contact_id FROM transactions WHERE from_user_id = ?", (user_id,))
                 else:
-                    cursor.execute("SELECT id, contact_id, type, amount, date, description FROM transactions")
+                    cursor.execute("SELECT id, from_user_id, to_user_id, type, amount, date, description, contact_id FROM transactions WHERE to_user_id = ?", (user_id,))
                 rows = cursor.fetchall()
             transactions = [
                 {
                     "id": r[0],
-                    "contact_id": r[1],
-                    "type": r[2],
-                    "amount": r[3],
-                    "date": r[4],
-                    "description": r[5]
+                    "from_user_id": r[1],
+                    "to_user_id": r[2],
+                    "type": r[3],
+                    "amount": r[4],
+                    "date": r[5],
+                    "description": r[6],
+                    "contact_id": r[7]
                 }
                 for r in rows
             ]
-            logger.info(f"Retrieved {len(transactions)} transactions from the database (contact_id={contact_id}).")
+            logger.info(f"Retrieved {len(transactions)} transactions for user {user_id} (as_sender={as_sender}).")
             return self.dict_response(True, data=transactions)
         except Exception as e:
-            error_msg = f"Error retrieving transactions: {str(e)}"
+            error_msg = f"Error retrieving transactions for user {user_id}: {str(e)}"
             logger.error(error_msg)
             return self.dict_response(False, error_msg)
 
-    def delete_transaction(self, transaction_id):
+    def delete_transaction(self, transaction_id, user_id):
         """
-        Deletes a transaction from the database using its transaction ID.
-        Returns a standardized response indicating success or failure.
+        Deletes a transaction by id if the user is the sender.
         """
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("DELETE FROM transactions WHERE id = ?", (transaction_id,))
+                cursor.execute("DELETE FROM transactions WHERE id = ? AND from_user_id = ?", (transaction_id, user_id))
                 conn.commit()
-            logger.info(f"Deleted transaction with ID {transaction_id}.")
+            logger.info(f"Deleted transaction with ID {transaction_id} for user {user_id}.")
             return self.dict_response(True)
         except Exception as e:
-            error_msg = f"Error deleting transaction with ID {transaction_id}: {str(e)}"
+            error_msg = f"Error deleting transaction with ID {transaction_id} for user {user_id}: {str(e)}"
             logger.error(error_msg)
             return self.dict_response(False, error_msg)
 
-    def get_contact_balance(self, contact_id):
+    def get_user_balance(self, user_id):
         """
-        Calculates the balance for a specific contact by summing all 'credit' and 'debit' transactions.
-        Also returns total credits and debits separately for more detailed reporting.
+        Calculates the balance for a user based on transactions (credit received, debit sent).
         """
         CREDIT = "credit"
         DEBIT = "debit"
@@ -110,9 +104,14 @@ class TransactionsManager:
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
+                # Sum all credits received and debits sent
                 cursor.execute(
-                    "SELECT type, SUM(amount) FROM transactions WHERE contact_id = ? GROUP BY type",
-                    (contact_id,)
+                    """
+                    SELECT type, SUM(amount) FROM transactions
+                    WHERE (from_user_id = ? OR to_user_id = ?)
+                    GROUP BY type
+                    """,
+                    (user_id, user_id)
                 )
                 results = cursor.fetchall()
 
@@ -125,13 +124,13 @@ class TransactionsManager:
                 elif transaction_type == DEBIT:
                     total_debit += total_amount
                 else:
-                    logger.warning(f"Unknown transaction type '{transaction_type}' for contact ID {contact_id}")
+                    logger.warning(f"Unknown transaction type '{transaction_type}' for user ID {user_id}")
 
             balance = total_credit - total_debit
 
-            logger.info(f"Calculated balance for contact ID {contact_id}: {balance} (credit={total_credit}, debit={total_debit})")
+            logger.info(f"Calculated balance for user ID {user_id}: {balance} (credit={total_credit}, debit={total_debit})")
             return self.dict_response(True, data=balance)
         except Exception as e:
-            error_msg = f"Error calculating balance for contact ID {contact_id}: {str(e)}"
+            error_msg = f"Error calculating balance for user ID {user_id}: {str(e)}"
             logger.error(error_msg)
             return self.dict_response(False, error_msg)
