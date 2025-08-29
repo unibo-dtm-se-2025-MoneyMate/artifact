@@ -66,3 +66,11 @@ def test_validate_transaction_negative_amount(amount):
     error = validate_transaction("credit", amount, "2025-08-19")
     assert error is not None
     assert "positive" in error.lower()
+
+def test_validate_transaction_invalid_date_format():
+    """
+    Test that an invalid date format is rejected with an appropriate error.
+    """
+    error = validate_transaction("debit", 10, "19-08-2025")
+    assert error is not None
+    assert "date format" in error.lower()
