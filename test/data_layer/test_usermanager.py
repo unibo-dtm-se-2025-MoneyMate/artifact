@@ -42,13 +42,13 @@ def test_register_and_login_user():
     
     # Register a new user
     res = db.users.register_user("testuser", "password123")
-    assert res["success"], f"Registration should succeed: {res}"
+    assert res["success"], "Registration should succeed: {}".format(res)
     user_id = res["data"]["user_id"]
     assert isinstance(user_id, int) and user_id > 0
 
     # Login with correct credentials
     res_login = db.users.login_user("testuser", "password123")
-    assert res_login["success"], f"Login should succeed: {res_login}"
+    assert res_login["success"], "Login should succeed: {}".format(res_login)
     assert res_login["data"]["user_id"] == user_id
 
     # Login with incorrect password
