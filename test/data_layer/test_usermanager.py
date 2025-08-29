@@ -12,6 +12,8 @@ This test file covers:
 import pytest
 from MoneyMate.data_layer.manager import DatabaseManager
 import os
+import gc
+import time
 
 TEST_DB = "test_usermanager.db"
 
@@ -24,10 +26,16 @@ def setup_module(module):
 
 def teardown_module(module):
     # Remove test DB file after tests
-    try:
-        os.remove(TEST_DB)
-    except FileNotFoundError:
-        pass
+    # Retry if file is locked (Windows)
+    for _ in range(10):
+        try:
+            os.remove(TEST_DB)
+            break
+        except PermissionError:
+            time.sleep(0.2)
+    # If still not deleted, raise for visibility
+    if os.path.exists(TEST_DB):
+        raise PermissionError(f"Unable to delete test database file: {TEST_DB}")
 
 def test_register_and_login_user():
     db = DatabaseManager(TEST_DB)
@@ -55,3 +63,4 @@ def test_register_and_login_user():
 
     # Close DB before teardown to release file (especially on Windows)
     db.close()
+    gc.collect()  # Force closing of any remaining file handles
