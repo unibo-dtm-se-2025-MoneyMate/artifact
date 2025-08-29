@@ -1,5 +1,6 @@
 import os
 import gc
+import time
 import pytest
 from MoneyMate.data_layer.database import init_db, get_connection, list_tables
 
@@ -12,8 +13,15 @@ def setup_module(module):
 
 def teardown_module(module):
     gc.collect()
+    for _ in range(10):
+        try:
+            if os.path.exists(TEST_DB):
+                os.remove(TEST_DB)
+            break
+        except PermissionError:
+            time.sleep(0.2)
     if os.path.exists(TEST_DB):
-        os.remove(TEST_DB)
+        raise PermissionError(f"Unable to delete test database file: {TEST_DB}")
 
 def test_tables_created():
     """Check if all required core tables are created in the database."""
