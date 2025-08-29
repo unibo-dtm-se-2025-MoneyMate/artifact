@@ -52,3 +52,6 @@ def test_register_and_login_user():
     res_dup = db.users.register_user("testuser", "password123")
     assert not res_dup["success"], "Duplicate registration should fail"
     assert "already exists" in res_dup["error"]
+
+    # Close DB before teardown to release file (especially on Windows)
+    db.close()
