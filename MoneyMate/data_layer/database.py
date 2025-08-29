@@ -128,6 +128,12 @@ def init_db(db_path: str) -> Dict[str, Any]:
                 # In case of older SQLite or edge cases, ignore; app will handle absence gracefully.
                 pass
 
+        # Ensure index on expenses.category_id if column is present (post-ALTER or already there)
+        cur.execute("PRAGMA table_info(expenses);")
+        expense_cols_after = {row[1] for row in cur.fetchall()}
+        if "category_id" in expense_cols_after:
+            cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_category_id ON expenses(category_id);")
+
         # Notes: can belong to exactly one of expense/transaction/contact (at least one not NULL)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS notes (
