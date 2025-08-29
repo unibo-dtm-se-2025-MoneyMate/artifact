@@ -252,8 +252,24 @@ def api_delete_transaction(transaction_id, user_id):
 
 def api_get_user_balance(user_id):
     """
-    Get the current balance for a user, aggregating credits/debits.
+    Get the current balance for a user (LEGACY semantics: credit - debit over all tx where user is sender or receiver).
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_get_user_balance (user_id={user_id})")
     return get_db().transactions.get_user_balance(user_id)
+
+def api_get_user_net_balance(user_id):
+    """
+    Get the NET balance for a user (recommended for GUI): credits_received - debits_sent.
+    Returns: dict {success, error, data}
+    """
+    logger.info(f"API call: api_get_user_net_balance (user_id={user_id})")
+    return get_db().transactions.get_user_net_balance(user_id)
+
+def api_get_user_balance_breakdown(user_id):
+    """
+    Get a detailed balance breakdown for a user.
+    Returns: dict {success, error, data: {credits_received, debits_sent, credits_sent, debits_received, net, legacy}}
+    """
+    logger.info(f"API call: api_get_user_balance_breakdown (user_id={user_id})")
+    return get_db().transactions.get_user_balance_breakdown(user_id)
