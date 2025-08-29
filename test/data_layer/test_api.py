@@ -1,11 +1,13 @@
 import os
 import gc
+import time
 import pytest
 from MoneyMate.data_layer.api import (
     api_list_tables, api_add_expense, api_get_expenses,
     api_add_contact, api_get_contacts, api_add_transaction,
     api_get_transactions, api_get_user_balance,
-    set_db_path, api_register_user, api_login_user
+    set_db_path, api_register_user, api_login_user,
+    api_get_user_net_balance, api_get_user_balance_breakdown, api_health,
 )
 from MoneyMate.data_layer.manager import DatabaseManager
 from MoneyMate.data_layer.database import get_connection
@@ -26,11 +28,19 @@ def teardown_module(module):
     """
     Remove the test database after all tests have run.
     Releases API global DB reference and ensures proper file cleanup.
+    Adds a retry loop to avoid Windows file locks.
     """
     set_db_path(None)
     gc.collect()
+    for _ in range(10):
+        try:
+            if os.path.exists(TEST_DB):
+                os.remove(TEST_DB)
+            break
+        except PermissionError:
+            time.sleep(0.2)
     if os.path.exists(TEST_DB):
-        os.remove(TEST_DB)
+        raise PermissionError(f"Unable to delete test database file: {TEST_DB}")
 
 def _get_test_user():
     # Ensure a test user exists and return user_id
@@ -200,3 +210,62 @@ def test_api_add_expense_with_category_id():
     assert matches, "Expected the API-inserted expense to be present"
     assert "category_id" in matches[0]
     assert matches[0]["category_id"] == cat_id
+
+# --- New tests for NET balance and health ---
+
+def test_api_net_balance_and_breakdown():
+    """
+    Verify NET balance semantics and detailed breakdown:
+    - net = credits_received - debits_sent
+    - legacy remains (credits_received + credits_sent) - (debits_sent + debits_received)
+    Scenario:
+      u1 -> u2: credit 50
+      u1 -> u2: debit 20
+    Expected:
+      u1: net = 0 - 20 = -20, legacy = (0+50)-(20+0)=30
+      u2: net = 50 - 0 = 50, legacy = (50+0)-(0+20)=30
+    """
+    u1 = _ensure_user("net_user1", "pw")
+    u2 = _ensure_user("net_user2", "pw")
+
+    # Create transactions
+    api_add_transaction(u1, u2, "credit", 50, "2025-08-19", "Loan")
+    api_add_transaction(u1, u2, "debit", 20, "2025-08-19", "Repayment")
+
+    # NET balances
+    net_u1 = api_get_user_net_balance(u1)
+    net_u2 = api_get_user_net_balance(u2)
+    assert net_u1["success"] and net_u2["success"]
+    assert net_u1["data"] == -20
+    assert net_u2["data"] == 50
+
+    # Breakdown checks
+    br_u1 = api_get_user_balance_breakdown(u1)
+    br_u2 = api_get_user_balance_breakdown(u2)
+    assert br_u1["success"] and br_u2["success"]
+
+    b1 = br_u1["data"]
+    b2 = br_u2["data"]
+
+    assert b1["credits_received"] == 0
+    assert b1["debits_sent"] == 20
+    assert b1["credits_sent"] == 50
+    assert b1["debits_received"] == 0
+    assert b1["net"] == -20
+    assert b1["legacy"] == 30
+
+    assert b2["credits_received"] == 50
+    assert b2["debits_sent"] == 0
+    assert b2["credits_sent"] == 0
+    assert b2["debits_received"] == 20
+    assert b2["net"] == 50
+    assert b2["legacy"] == 30
+
+def test_api_health_returns_schema_version():
+    """
+    Verify that api_health returns the current schema_version as an integer.
+    """
+    res = api_health()
+    assert isinstance(res, dict)
+    assert res["success"]
+    assert isinstance(res["data"], int)
