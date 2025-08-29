@@ -38,7 +38,8 @@ class UserManager:
             with get_connection(self.db_path) as conn:
                 cur = conn.cursor()
                 # Verify table existence once (cheap PRAGMA)
-                cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='access_logs';")
+                # Use sqlite_schema for consistency with other introspection queries
+                cur.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name='access_logs';")
                 if cur.fetchone() is None:
                     return  # schema not yet migrated; skip logging
                 cur.execute(
