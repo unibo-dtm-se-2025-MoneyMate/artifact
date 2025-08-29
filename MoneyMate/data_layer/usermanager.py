@@ -86,7 +86,7 @@ class UserManager:
                 return self.dict_response(False, "Username already exists")
             return self.dict_response(False, str(e))
 
-    def login_user(self, username, password):
+    def login_user(self, username, password, ip_address=None, user_agent=None):
         """
         Authenticate a user.
         Returns user_id and role if credentials are valid.
@@ -103,17 +103,26 @@ class UserManager:
                 row = cursor.fetchone()
             if row and check_password_hash(row[1], password):
                 logger.info(f"User authenticated successfully: {username}")
-                self._log_access(user_id=row[0], action="login")
+                self._log_access(user_id=row[0], action="login", ip_address=ip_address, user_agent=user_agent)
                 return self.dict_response(True, data={"user_id": row[0], "role": row[2]})
             else:
                 logger.warning(f"Invalid credentials for user: {username}")
                 # If we know the user id (username exists), log failed_login with that id
                 uid = row[0] if row else None
-                self._log_access(user_id=uid, action="failed_login")
+                self._log_access(user_id=uid, action="failed_login", ip_address=ip_address, user_agent=user_agent)
                 return self.dict_response(False, "Invalid credentials")
         except Exception as e:
             logger.error(f"Error authenticating user {username}: {e}")
             return self.dict_response(False, str(e))
+
+    def logout_user(self, user_id, ip_address=None, user_agent=None):
+        """
+        Log user logout event in access_logs (best-effort).
+        Returns: dict {success, error, data}
+        """
+        self._log_access(user_id=user_id, action="logout", ip_address=ip_address, user_agent=user_agent)
+        logger.info(f"User logout logged for user_id {user_id}")
+        return self.dict_response(True)
 
     def change_password(self, user_id, old_password, new_password):
         """
