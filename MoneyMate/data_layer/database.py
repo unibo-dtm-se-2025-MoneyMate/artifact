@@ -2,6 +2,7 @@
 Database utilities for MoneyMate: initialization, connections, and schema management.
 
 This module:
+- Defines a default DB_PATH for the manager default.
 - Initializes the SQLite database with all required tables.
 - Ensures PRAGMA foreign_keys=ON for every connection.
 - Provides a helper to list existing tables.
@@ -16,8 +17,10 @@ Schema extensions:
 """
 
 import sqlite3
-from contextlib import contextmanager
-from typing import Optional, Dict, Any, List
+from typing import Dict, Any
+
+# Default database path used by DatabaseManager when no path is provided.
+DB_PATH = "moneymate.db"
 
 def get_connection(db_path: str):
     """
@@ -42,7 +45,7 @@ def init_db(db_path: str) -> Dict[str, Any]:
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL UNIQUE,
-                password TEXT NOT NULL,
+                password_hash TEXT NOT NULL,
                 role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','admin')),
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
             );
@@ -99,7 +102,7 @@ def init_db(db_path: str) -> Dict[str, Any]:
 
         # Extended tables
 
-        # Per-user custom categories (optional mapping for expenses.category_id)
+        # Per-user custom categories
         cur.execute("""
             CREATE TABLE IF NOT EXISTS categories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -116,16 +119,16 @@ def init_db(db_path: str) -> Dict[str, Any]:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_categories_user_id ON categories(user_id);")
 
         # If expenses.category_id doesn't exist, add it (nullable, keeps legacy text 'category')
-        # Note: SQLite doesn't support IF NOT EXISTS on ALTER, so we probe first.
         cur.execute("PRAGMA table_info(expenses);")
         expense_cols = {row[1] for row in cur.fetchall()}
         if "category_id" not in expense_cols:
-            cur.execute("ALTER TABLE expenses ADD COLUMN category_id INTEGER;")
-            # Add FK via a separate table if needed; in SQLite, FKs must be in CREATE TABLE,
-            # so we rely on application-level validation for legacy DBs.
-            # New DBs will use the CREATE TABLE version above; for old ones, FK enforcement on category_id is best-effort.
+            try:
+                cur.execute("ALTER TABLE expenses ADD COLUMN category_id INTEGER;")
+            except Exception:
+                # In case of older SQLite or edge cases, ignore; app will handle absence gracefully.
+                pass
 
-        # Notes: can belong to exactly one of expense/transaction/contact (enforced minimally: at least one not NULL)
+        # Notes: can belong to exactly one of expense/transaction/contact (at least one not NULL)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS notes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
