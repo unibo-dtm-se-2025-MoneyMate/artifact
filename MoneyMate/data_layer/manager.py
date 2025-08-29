@@ -30,7 +30,9 @@ from .expenses import ExpensesManager
 from .contacts import ContactsManager
 from .transactions import TransactionsManager
 from .usermanager import UserManager
+from .categories import CategoriesManager
 import logging
+import sqlite3
 import MoneyMate.data_layer.logging_config  # Ensure global logging configuration
 
 logger = logging.getLogger(__name__)
@@ -49,16 +51,38 @@ class DatabaseManager:
         self.contacts = None
         self.transactions = None
         self.users = None
+        self.categories = None
+        # Close keeper connection (if any)
+        if getattr(self, "_keeper", None):
+            try:
+                self._keeper.close()
+            except Exception:
+                pass
+            finally:
+                self._keeper = None
 
     def __init__(self, db_path=DB_PATH):
         # Initialize the database and managers
         logger.info(f"Initializing DatabaseManager with db_path: {db_path}")
         self.db_path = db_path  # store for diagnostics and future reuse
+
+        # For shared in-memory databases, keep a persistent connection alive.
+        # Expected format: file:moneymate?mode=memory&cache=shared
+        self._keeper = None
+        if isinstance(db_path, str) and db_path.startswith("file:") and "mode=memory" in db_path:
+            try:
+                self._keeper = sqlite3.connect(db_path, uri=True, check_same_thread=False)
+                self._keeper.execute("PRAGMA foreign_keys = ON;")
+                logger.info("Keeper connection established for shared in-memory database.")
+            except Exception as e:
+                logger.warning(f"Failed to create keeper connection for in-memory DB: {e}")
+
         init_db(db_path)
         self.expenses = ExpensesManager(db_path)
         self.contacts = ContactsManager(db_path)
         self.transactions = TransactionsManager(db_path, self.contacts)
         self.users = UserManager(db_path)
+        self.categories = CategoriesManager(db_path)
 
     def _create_managers(self, db_path):
         """
@@ -71,6 +95,7 @@ class DatabaseManager:
         self.contacts = ContactsManager(db_path)
         self.transactions = TransactionsManager(db_path, self.contacts)
         self.users = UserManager(db_path)
+        self.categories = CategoriesManager(db_path)
 
     def list_tables(self):
         """
@@ -86,6 +111,26 @@ class DatabaseManager:
         Set a new database path and re-initialize all managers to use it.
         """
         logger.info(f"Setting new db_path: {db_path} and re-initializing managers.")
+
+        # Close existing keeper connection (if any)
+        if getattr(self, "_keeper", None):
+            try:
+                self._keeper.close()
+            except Exception:
+                pass
+            finally:
+                self._keeper = None
+
         self.db_path = db_path
+
+        # Recreate keeper if moving to shared in-memory DB
+        if isinstance(db_path, str) and db_path.startswith("file:") and "mode=memory" in db_path:
+            try:
+                self._keeper = sqlite3.connect(db_path, uri=True, check_same_thread=False)
+                self._keeper.execute("PRAGMA foreign_keys = ON;")
+                logger.info("Keeper connection established for shared in-memory database (after path change).")
+            except Exception as e:
+                logger.warning(f"Failed to create keeper connection for in-memory DB: {e}")
+
         init_db(db_path)
         self._create_managers(db_path)
