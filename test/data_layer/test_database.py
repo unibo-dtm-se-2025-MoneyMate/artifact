@@ -16,11 +16,18 @@ def teardown_module(module):
         os.remove(TEST_DB)
 
 def test_tables_created():
-    """Check if all required tables are created in the database."""
+    """Check if all required core tables are created in the database."""
     tables_result = list_tables(TEST_DB)
     assert isinstance(tables_result, dict)
     tables = tables_result["data"]
     assert set(tables) >= {"users", "contacts", "expenses", "transactions"}
+
+def test_extended_tables_created():
+    """Check if extended tables exist: categories, notes, attachments, access_logs."""
+    tables_result = list_tables(TEST_DB)
+    assert isinstance(tables_result, dict)
+    tables = set(tables_result["data"])
+    assert {"categories", "notes", "attachments", "access_logs"}.issubset(tables)
 
 def test_get_connection():
     """Test that get_connection returns an active connection to the database."""
@@ -35,4 +42,13 @@ def test_users_table_has_role_column():
     cursor.execute("PRAGMA table_info(users)")
     columns = [row[1] for row in cursor.fetchall()]
     assert "role" in columns
+    conn.close()
+
+def test_expenses_table_has_category_id():
+    """Test that the expenses table has an optional category_id FK column."""
+    conn = get_connection(TEST_DB)
+    cursor = conn.cursor()
+    cursor.execute("PRAGMA table_info(expenses)")
+    columns = [row[1] for row in cursor.fetchall()]
+    assert "category_id" in columns
     conn.close()
