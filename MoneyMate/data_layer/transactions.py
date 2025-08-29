@@ -1,7 +1,7 @@
 from .database import get_connection
 from .validation import validate_transaction
 import logging
-import MoneyMate.data_layer.logging_config  # Assicura la configurazione globale
+import MoneyMate.data_layer.logging_config  # Ensure global logging configuration
 
 logger = logging.getLogger(__name__)
 
@@ -64,16 +64,19 @@ class TransactionsManager:
             logger.error(f"Error checking existence for user ID {user_id}: {e}")
             return False
 
-    def get_transactions(self, user_id, as_sender=True):
+    def get_transactions(self, user_id, as_sender=True, is_admin=False):
         """
         Retrieves transactions from the database.
+        If is_admin is True, returns ALL transactions in the system.
         If as_sender is True, returns those WHERE from_user_id=user_id.
         If False, returns those WHERE to_user_id=user_id.
         """
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
-                if as_sender:
+                if is_admin:
+                    cursor.execute("SELECT id, from_user_id, to_user_id, type, amount, date, description, contact_id FROM transactions")
+                elif as_sender:
                     cursor.execute("SELECT id, from_user_id, to_user_id, type, amount, date, description, contact_id FROM transactions WHERE from_user_id = ?", (user_id,))
                 else:
                     cursor.execute("SELECT id, from_user_id, to_user_id, type, amount, date, description, contact_id FROM transactions WHERE to_user_id = ?", (user_id,))
@@ -91,7 +94,7 @@ class TransactionsManager:
                 }
                 for r in rows
             ]
-            logger.info(f"Retrieved {len(transactions)} transactions for user {user_id} (as_sender={as_sender}).")
+            logger.info(f"Retrieved {len(transactions)} transactions for user {user_id} (is_admin={is_admin}, as_sender={as_sender}).")
             return self.dict_response(True, data=transactions)
         except Exception as e:
             error_msg = f"Error retrieving transactions for user {user_id}: {str(e)}"
