@@ -10,10 +10,12 @@ This test file covers:
 - Admin registration and forced password
 - Role logic: user/admin/upgrade
 - Change and reset password (role check)
+- Access logs auditing for login, failed_login, password_change, password_reset
 """
 
 import pytest
 from MoneyMate.data_layer.manager import DatabaseManager
+from MoneyMate.data_layer.database import get_connection
 import os
 import gc
 import time
@@ -120,6 +122,56 @@ def test_change_and_reset_password():
     notadm_reset = db.users.reset_password(user_id, admin_id, "failpw")
     assert not notadm_reset["success"]
     assert "admin privileges" in notadm_reset["error"].lower()
+
+    db.close()
+    gc.collect()
+
+def test_access_logs_auditing():
+    """
+    Verify that access_logs records login, failed_login, password_change, and password_reset events.
+    Uses deltas to avoid flaky counts when tests run multiple times.
+    """
+    db = DatabaseManager(TEST_DB)
+    # Unique users to avoid collisions with other tests
+    res_admin = db.users.register_user("audit_admin", "12345", role="admin")
+    if not res_admin["success"]:
+        # user may exist if the test re-runs; just login to retrieve id
+        admin_id = db.users.login_user("audit_admin", "12345")["data"]["user_id"]
+    else:
+        admin_id = res_admin["data"]["user_id"]
+
+    res_user = db.users.register_user("audit_user", "pw")
+    if not res_user["success"]:
+        user_id = db.users.login_user("audit_user", "pw")["data"]["user_id"]
+    else:
+        user_id = res_user["data"]["user_id"]
+
+    def get_count(action, uid):
+        with get_connection(TEST_DB) as conn:
+            cur = conn.cursor()
+            cur.execute(
+                "SELECT COUNT(*) FROM access_logs WHERE user_id IS ? AND action = ?",
+                (uid, action),
+            )
+            return cur.fetchone()[0]
+
+    # Baselines
+    base_login = get_count("login", user_id)
+    base_failed = get_count("failed_login", user_id)
+    base_change = get_count("password_change", user_id)
+    base_reset = get_count("password_reset", user_id)
+
+    # Trigger events
+    assert db.users.login_user("audit_user", "pw")["success"]
+    assert not db.users.login_user("audit_user", "wrong")["success"]
+    assert db.users.change_password(user_id, "pw", "pw2")["success"]
+    assert db.users.reset_password(admin_id, user_id, "pw3")["success"]
+
+    # Post counts (expect +1 for each)
+    assert get_count("login", user_id) == base_login + 1
+    assert get_count("failed_login", user_id) == base_failed + 1
+    assert get_count("password_change", user_id) == base_change + 1
+    assert get_count("password_reset", user_id) == base_reset + 1
 
     db.close()
     gc.collect()
