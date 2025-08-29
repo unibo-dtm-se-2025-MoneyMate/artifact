@@ -4,6 +4,7 @@ import gc
 import pytest
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../../')))
 from MoneyMate.data_layer.manager import DatabaseManager
+from MoneyMate.data_layer.database import get_connection
 
 TEST_DB = "test_expenses.db"
 
@@ -27,11 +28,11 @@ def db():
 
 def test_tables_exist(db):
     """
-    Verify that all required tables are created in the database.
+    Verify that all required tables are created in the database (core + extended).
     """
     tables = db.list_tables()["data"]
     tables = [t for t in tables if t != "sqlite_sequence"]
-    assert set(tables) == {"expenses", "contacts", "transactions", "users"}
+    assert set(tables) >= {"expenses", "contacts", "transactions", "users", "categories", "notes", "attachments", "access_logs"}
 
 def test_add_expense_valid(db):
     """
@@ -107,3 +108,42 @@ def test_api_response_format(db):
     res = db.expenses.add_expense("A", 1, "2025-08-19", "Food", db._test_user_id)
     assert isinstance(res, dict)
     assert "success" in res and "error" in res and "data" in res
+
+def test_add_expense_with_category_id_valid(db):
+    """
+    Add an expense linked to a user-owned category (via category_id).
+    Expects success and that category_id is present in the retrieved expense.
+    """
+    # Create a category for this user
+    with get_connection(TEST_DB) as conn:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO categories (user_id, name) VALUES (?, ?)", (db._test_user_id, "FoodCat"))
+        cat_id = cur.lastrowid
+        conn.commit()
+
+    res = db.expenses.add_expense("ExpenseCat", 12.0, "2025-08-19", "Food", db._test_user_id, category_id=cat_id)
+    assert res["success"]
+
+    all_expenses = db.expenses.get_expenses(db._test_user_id)["data"]
+    # Find our expense and ensure category_id is included and correct
+    matches = [e for e in all_expenses if e["title"] == "ExpenseCat"]
+    assert matches, "Expected to find the expense we just inserted"
+    assert "category_id" in matches[0]
+    assert matches[0]["category_id"] == cat_id
+
+def test_add_expense_with_category_id_invalid_user(db):
+    """
+    Attempt to add an expense with a category_id belonging to another user.
+    Expects validation failure.
+    """
+    # Create another user and a category for that user
+    other_user_id = db.users.register_user("otheruser", "pw")["data"]["user_id"]
+    with get_connection(TEST_DB) as conn:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO categories (user_id, name) VALUES (?, ?)", (other_user_id, "OtherCat"))
+        other_cat_id = cur.lastrowid
+        conn.commit()
+
+    res = db.expenses.add_expense("WrongCat", 9.0, "2025-08-19", "Misc", db._test_user_id, category_id=other_cat_id)
+    assert not res["success"]
+    assert "invalid category" in res["error"].lower()
