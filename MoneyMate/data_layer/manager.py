@@ -53,6 +53,7 @@ class DatabaseManager:
     def __init__(self, db_path=DB_PATH):
         # Initialize the database and managers
         logger.info(f"Initializing DatabaseManager with db_path: {db_path}")
+        self.db_path = db_path  # store for diagnostics and future reuse
         init_db(db_path)
         self.expenses = ExpensesManager(db_path)
         self.contacts = ContactsManager(db_path)
