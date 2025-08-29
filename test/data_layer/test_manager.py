@@ -12,7 +12,6 @@ def setup_module(module):
     """
     if os.path.exists(TEST_DB):
         os.remove(TEST_DB)
-    # Initialize DB schema to ensure all tables exist before tests run
     DatabaseManager(TEST_DB)
 
 def teardown_module(module):
@@ -20,7 +19,7 @@ def teardown_module(module):
     Remove the test database after all tests have run.
     Ensures proper cleanup and releases all file handles.
     """
-    gc.collect()  # Force garbage collection to close any lingering SQLite handles
+    gc.collect()
     if os.path.exists(TEST_DB):
         os.remove(TEST_DB)
 
@@ -39,7 +38,7 @@ def dbm():
 def test_database_manager_list_tables(dbm):
     """
     Test that the DatabaseManager can list all tables in the database.
-    Verifies that the three main tables exist.
+    Verifies that users, contacts, expenses, transactions tables exist.
     """
     tables = dbm.list_tables()["data"]
-    assert set(tables) >= {"contacts", "expenses", "transactions"}
+    assert set(tables) >= {"users", "contacts", "expenses", "transactions"}
