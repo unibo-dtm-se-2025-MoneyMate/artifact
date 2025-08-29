@@ -28,6 +28,28 @@ class UserManager:
         """Returns a standardized dictionary for all API responses (MoneyMate convention)."""
         return {"success": success, "error": error, "data": data}
 
+    # --- Internal helpers (best-effort, resilient if table does not exist) ---
+    def _log_access(self, user_id, action, ip_address=None, user_agent=None):
+        """
+        Append an entry into access_logs (if the table exists).
+        Silently ignore errors to avoid impacting auth flows.
+        """
+        try:
+            with get_connection(self.db_path) as conn:
+                cur = conn.cursor()
+                # Verify table existence once (cheap PRAGMA)
+                cur.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='access_logs';")
+                if cur.fetchone() is None:
+                    return  # schema not yet migrated; skip logging
+                cur.execute(
+                    "INSERT INTO access_logs (user_id, action, ip_address, user_agent) VALUES (?, ?, ?, ?)",
+                    (user_id, action, ip_address, user_agent),
+                )
+                conn.commit()
+        except Exception as e:
+            # Do not raise; only log
+            logger.debug(f"Access log write skipped ({action}) for user {user_id}: {e}")
+
     def register_user(self, username, password, role="user"):
         """
         Register a new user.
@@ -55,6 +77,7 @@ class UserManager:
                 conn.commit()
                 user_id = cursor.lastrowid
             logger.info(f"Registered new user: {username} (id={user_id}, role={role})")
+            # Registration could be logged if needed (not a security event like auth)
             return self.dict_response(True, data={"user_id": user_id})
         except Exception as e:
             logger.error(f"Error registering user {username}: {e}")
@@ -79,9 +102,13 @@ class UserManager:
                 row = cursor.fetchone()
             if row and check_password_hash(row[1], password):
                 logger.info(f"User authenticated successfully: {username}")
+                self._log_access(user_id=row[0], action="login")
                 return self.dict_response(True, data={"user_id": row[0], "role": row[2]})
             else:
                 logger.warning(f"Invalid credentials for user: {username}")
+                # If we know the user id (username exists), log failed_login with that id
+                uid = row[0] if row else None
+                self._log_access(user_id=uid, action="failed_login")
                 return self.dict_response(False, "Invalid credentials")
         except Exception as e:
             logger.error(f"Error authenticating user {username}: {e}")
@@ -107,6 +134,7 @@ class UserManager:
                 cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
                 conn.commit()
             logger.info(f"Password changed successfully for user_id {user_id}")
+            self._log_access(user_id=user_id, action="password_change")
             return self.dict_response(True)
         except Exception as e:
             logger.error(f"Error changing password for user_id {user_id}: {e}")
@@ -134,6 +162,7 @@ class UserManager:
                 cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, target_user_id))
                 conn.commit()
             logger.info(f"Password reset for user_id {target_user_id} by admin {admin_user_id}")
+            self._log_access(user_id=target_user_id, action="password_reset")
             return self.dict_response(True)
         except Exception as e:
             logger.error(f"Error resetting password for user_id {target_user_id}: {e}")
