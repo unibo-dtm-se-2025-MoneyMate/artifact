@@ -17,40 +17,51 @@ def get_connection(db_path=DB_PATH):
 def init_db(db_path=DB_PATH):
     """
     Creates the tables if they do not exist in the SQLite database.
+    Now supports multi-user expense and transaction tracking.
     """
     try:
         with get_connection(db_path) as conn:
             cursor = conn.cursor()
             logger.info(f"Initializing database and creating tables if they do not exist (db_path={db_path})")
             cursor.execute("""
+                CREATE TABLE IF NOT EXISTS users (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    username TEXT UNIQUE NOT NULL,
+                    password_hash TEXT NOT NULL
+                )
+            """)
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS contacts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            """)
+            cursor.execute("""
                 CREATE TABLE IF NOT EXISTS expenses (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     title TEXT NOT NULL,
                     price REAL NOT NULL,
                     date TEXT NOT NULL,
-                    category TEXT NOT NULL
-                )""")
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS contacts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL
-                )""")
+                    category TEXT NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+            """)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS transactions (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    contact_id INTEGER NOT NULL,
+                    from_user_id INTEGER NOT NULL,
+                    to_user_id INTEGER NOT NULL,
                     type TEXT CHECK(type IN ('debit', 'credit')) NOT NULL,
                     amount REAL NOT NULL,
                     date TEXT NOT NULL,
                     description TEXT,
+                    contact_id INTEGER,
+                    FOREIGN KEY(from_user_id) REFERENCES users(id),
+                    FOREIGN KEY(to_user_id) REFERENCES users(id),
                     FOREIGN KEY(contact_id) REFERENCES contacts(id)
-                )""")
-            # --- Add users table creation here ---
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS users (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT UNIQUE NOT NULL,
-                    password_hash TEXT NOT NULL
                 )
             """)
             conn.commit()
@@ -59,7 +70,6 @@ def init_db(db_path=DB_PATH):
         logger.error(f"Error initializing database at {db_path}: {e}")
         raise
 
-# --- Method to list all tables in the DB, especially useful for testing ---
 def list_tables(db_path=DB_PATH):
     """
     Returns a list of all tables in the database.
