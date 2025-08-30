@@ -91,7 +91,12 @@ def test_expense_logging(caplog, db):
 
     with caplog.at_level("INFO"):
         result_del = db.expenses.delete_expense(9999, db._test_user_id)
-        assert "Error deleting expense" in caplog.text or "Deleted expense" in caplog.text
+        # Accept idempotent delete semantics and previous error-style logs
+        assert (
+            "Deleted expense" in caplog.text
+            or "Error deleting expense" in caplog.text
+            or "Delete expense noop" in caplog.text
+        )
 
     with caplog.at_level("INFO"):
         result_clear = db.expenses.clear_expenses(db._test_user_id)
@@ -115,7 +120,12 @@ def test_contacts_logging(caplog, db):
 
     with caplog.at_level("INFO"):
         res_del = db.contacts.delete_contact(9999, db._test_user_id)
-        assert "Error deleting contact" in caplog.text or "Deleted contact" in caplog.text
+        # Accept idempotent delete semantics and previous error-style logs
+        assert (
+            "Deleted contact" in caplog.text
+            or "Error deleting contact" in caplog.text
+            or "Delete contact noop" in caplog.text
+        )
 
 def test_transactions_logging(caplog, db):
     """
@@ -141,13 +151,13 @@ def test_transactions_logging(caplog, db):
 
     with caplog.at_level("INFO"):
         res_del = db.transactions.delete_transaction(9999, sender_id)
-        # Accept explicit structured failures introduced by authorization/not-found checks,
-        # or success when a valid transaction is deleted.
+        # Accept explicit structured failures, success, or idempotent no-op logs
         assert (
             "Deleted transaction" in caplog.text
             or "Delete not authorized" in caplog.text
             or "Delete failed" in caplog.text
             or "Transaction not found" in caplog.text
+            or "Delete transaction noop" in caplog.text
         )
 
     with caplog.at_level("INFO"):

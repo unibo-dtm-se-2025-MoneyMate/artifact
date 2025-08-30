@@ -4,23 +4,9 @@ DatabaseManager: Central orchestrator for entity managers in MoneyMate.
 This class instantiates and exposes managers for expenses, contacts, transactions, and users,
 ensuring modularity, single responsibility, dependency injection, configurability, error handling, resource management, and testability.
 All data operations should be accessed through the appropriate manager instance.
-
-Design principles:
-- Each manager (ExpensesManager, ContactsManager, TransactionsManager, UserManager) is isolated in its own file.
-- ContactsManager is injected into TransactionsManager to handle cross-entity validation.
-- Database path is configurable for production and testing environments.
-- Utility methods such as list_tables are accessible for maintenance and health checks.
-- This approach follows best practices for software architecture, avoiding code duplication,
-  supporting future scalability, and facilitating CI/CD workflows (e.g. GitHub Actions).
-
-Usage:
-    with DatabaseManager() as db:
-        db.expenses.add_expense(...)
-        db.contacts.get_contacts()
-        db.transactions.get_contact_balance(...)
-        db.users.register_user(...)
 """
 
+from typing import Any, Dict, Optional
 from .database import DB_PATH, list_tables, init_db
 from .expenses import ExpensesManager
 from .contacts import ContactsManager
@@ -39,17 +25,17 @@ class DatabaseManager:
     Provides a unified interface for all data operations.
     """
 
-    def __enter__(self):
+    def __enter__(self) -> "DatabaseManager":
         return self
 
-    def __exit__(self, exc_type, exc, tb):
+    def __exit__(self, exc_type, exc, tb) -> bool:
         try:
             self.close()
         except Exception:
             pass
         return False  # don't suppress exceptions
 
-    def close(self):
+    def close(self) -> None:
         """
         Release all entity managers for test cleanup.
         """
@@ -59,7 +45,6 @@ class DatabaseManager:
         self.transactions = None
         self.users = None
         self.categories = None
-        # Close keeper connection (if any)
         if getattr(self, "_keeper", None):
             try:
                 self._keeper.close()
@@ -68,14 +53,11 @@ class DatabaseManager:
             finally:
                 self._keeper = None
 
-    def __init__(self, db_path=DB_PATH):
-        # Initialize the database and managers
+    def __init__(self, db_path: str = DB_PATH):
         logger.info(f"Initializing DatabaseManager with db_path: {db_path}")
-        self.db_path = db_path  # store for diagnostics and future reuse
+        self.db_path: str = db_path
 
-        # For shared in-memory databases, keep a persistent connection alive.
-        # Expected format: file:moneymate?mode=memory&cache=shared
-        self._keeper = None
+        self._keeper: Optional[sqlite3.Connection] = None
         if isinstance(db_path, str) and db_path.startswith("file:") and "mode=memory" in db_path:
             try:
                 self._keeper = sqlite3.connect(db_path, uri=True, check_same_thread=False)
@@ -91,11 +73,10 @@ class DatabaseManager:
         self.users = UserManager(db_path)
         self.categories = CategoriesManager(db_path)
 
-    def _create_managers(self, db_path):
+    def _create_managers(self, db_path: str) -> None:
         """
         Private method that creates and re-instantiates all entity managers
         with the new database path.
-        This is used when changing the database path at runtime.
         """
         logger.info(f"Re-creating managers with new db_path: {db_path}")
         self.expenses = ExpensesManager(db_path)
@@ -104,22 +85,20 @@ class DatabaseManager:
         self.users = UserManager(db_path)
         self.categories = CategoriesManager(db_path)
 
-    def list_tables(self):
+    def list_tables(self) -> Dict[str, Any]:
         """
         List all tables in the database.
         Useful for testing and diagnostics.
         """
         logger.info(f"Listing tables for db_path: {self.db_path}")
         return list_tables(db_path=self.db_path)
-    
 
-    def set_db_path(self, db_path):
+    def set_db_path(self, db_path: str) -> None:
         """
         Set a new database path and re-initialize all managers to use it.
         """
         logger.info(f"Setting new db_path: {db_path} and re-initializing managers.")
 
-        # Close existing keeper connection (if any)
         if getattr(self, "_keeper", None):
             try:
                 self._keeper.close()
@@ -130,7 +109,6 @@ class DatabaseManager:
 
         self.db_path = db_path
 
-        # Recreate keeper if moving to shared in-memory DB
         if isinstance(db_path, str) and db_path.startswith("file:") and "mode=memory" in db_path:
             try:
                 self._keeper = sqlite3.connect(db_path, uri=True, check_same_thread=False)

@@ -23,18 +23,20 @@ Important design note (per project tests/specs):
 """
 
 import sqlite3
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 # Default database path used by DatabaseManager when no path is provided.
 DB_PATH = "moneymate.db"
 
-def get_connection(db_path: str):
+# Simple schema versioning scaffold for classroom showcase (non-destructive)
+SCHEMA_VERSION = 2  # v2: formalize tightened CHECKS in CREATE TABLE and add migration scaffold
+
+def get_connection(db_path: str) -> sqlite3.Connection:
     """
     Return a new SQLite connection with foreign key support enabled.
     - Supports SQLite URI for shared in-memory DBs (e.g., file:moneymate?mode=memory&cache=shared).
     - Sets row_factory to sqlite3.Row for safer row handling.
     """
-    # If using an SQLite connection URI, enable uri=True for proper handling.
     if isinstance(db_path, str) and db_path.startswith("file:"):
         conn = sqlite3.connect(db_path, uri=True)
     else:
@@ -45,6 +47,30 @@ def get_connection(db_path: str):
     except Exception:
         pass
     return conn
+
+def _get_current_version(cur: sqlite3.Cursor) -> Optional[int]:
+    cur.execute("SELECT COUNT(*) AS cnt FROM sqlite_schema WHERE type='table' AND name='schema_version';")
+    exists = cur.fetchone()["cnt"] > 0
+    if not exists:
+        return None
+    cur.execute("SELECT version FROM schema_version LIMIT 1;")
+    row = cur.fetchone()
+    return int(row["version"]) if row else None
+
+def _set_version(cur: sqlite3.Cursor, version: int) -> None:
+    cur.execute("DELETE FROM schema_version;")
+    cur.execute("INSERT INTO schema_version (version) VALUES (?);", (version,))
+
+def _migrate(cur: sqlite3.Cursor, from_version: int, to_version: int) -> None:
+    """
+    Non-destructive migration scaffold.
+    For this showcase, we only bump the version to reflect tightened constraints
+    on new databases (CREATE TABLE path). Existing DBs are left as-is.
+    """
+    # Example migration path (no-op by design for this course project)
+    # if from_version < 2:
+    #     ... (add non-breaking indexes or columns if needed)
+    _set_version(cur, to_version)
 
 def init_db(db_path: str) -> Dict[str, Any]:
     """
@@ -63,17 +89,16 @@ def init_db(db_path: str) -> Dict[str, Any]:
         except Exception:
             pass
 
-        # Schema versioning (basic)
+        # Schema version table (create if missing)
         cur.execute("""
             CREATE TABLE IF NOT EXISTS schema_version (
                 version INTEGER NOT NULL
             );
         """)
-        cur.execute("SELECT COUNT(*) AS cnt FROM schema_version;")
-        count = cur.fetchone()["cnt"]
-        if count == 0:
-            # Start at version 1 for initial baseline of this codebase.
-            cur.execute("INSERT INTO schema_version (version) VALUES (1);")
+        current_version = _get_current_version(cur)
+        if current_version is None:
+            # Fresh DB: set to current SCHEMA_VERSION
+            _set_version(cur, SCHEMA_VERSION)
 
         # Core tables (order matters for FKs)
         cur.execute("""
@@ -104,9 +129,9 @@ def init_db(db_path: str) -> Dict[str, Any]:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
                 title TEXT NOT NULL,
-                price REAL NOT NULL CHECK (price >= 0),
+                price REAL NOT NULL CHECK (price > 0),
                 date TEXT NOT NULL,
-                category TEXT, -- legacy textual category
+                category TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
                 category_id INTEGER,
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
@@ -114,9 +139,7 @@ def init_db(db_path: str) -> Dict[str, Any]:
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_user_id ON expenses(user_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);")
-        # Composite index useful for GUI filtering by user/date
         cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date);")
-        # Ensure index on expenses.category_id (even if column existed before)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_category_id ON expenses(category_id);")
 
         # Transactions between users
@@ -126,11 +149,12 @@ def init_db(db_path: str) -> Dict[str, Any]:
                 from_user_id INTEGER NOT NULL,
                 to_user_id INTEGER NOT NULL,
                 type TEXT NOT NULL CHECK (type IN ('credit','debit')),
-                amount REAL NOT NULL CHECK (amount >= 0),
+                amount REAL NOT NULL CHECK (amount > 0),
                 date TEXT NOT NULL,
                 description TEXT,
-                contact_id INTEGER, -- optional link to a contact
+                contact_id INTEGER,
                 created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                CHECK (from_user_id <> to_user_id),
                 FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE CASCADE,
                 FOREIGN KEY (to_user_id) REFERENCES users(id) ON DELETE CASCADE,
                 FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL
@@ -139,7 +163,6 @@ def init_db(db_path: str) -> Dict[str, Any]:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_from_user ON transactions(from_user_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_to_user ON transactions(to_user_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);")
-        # Composite indexes for common filtered/ordered views in GUI
         cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_from_user_date ON transactions(from_user_id, date);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_to_user_date ON transactions(to_user_id, date);")
 
@@ -159,7 +182,7 @@ def init_db(db_path: str) -> Dict[str, Any]:
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_categories_user_id ON categories(user_id);")
 
-        # Notes: can belong to exactly one of expense/transaction/contact (at least one not NULL)
+        # Notes
         cur.execute("""
             CREATE TABLE IF NOT EXISTS notes (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -181,7 +204,7 @@ def init_db(db_path: str) -> Dict[str, Any]:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_notes_transaction_id ON notes(transaction_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_notes_contact_id ON notes(contact_id);")
 
-        # Attachments: file pointers attached to expense/transaction/contact (at least one)
+        # Attachments
         cur.execute("""
             CREATE TABLE IF NOT EXISTS attachments (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -205,7 +228,7 @@ def init_db(db_path: str) -> Dict[str, Any]:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_attachments_transaction_id ON attachments(transaction_id);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_attachments_contact_id ON attachments(contact_id);")
 
-        # Access/Security logs (MUST exist for auditing tests)
+        # Access logs
         cur.execute("""
             CREATE TABLE IF NOT EXISTS access_logs (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -223,7 +246,7 @@ def init_db(db_path: str) -> Dict[str, Any]:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_action ON access_logs(action);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_created_at ON access_logs(created_at);")
 
-        # Backward-compatible migration: if expenses.category_id column is missing (older DB), add it
+        # Backward-compatible migration: ensure expenses.category_id exists (older DBs)
         cur.execute("PRAGMA table_info(expenses);")
         expense_cols_after = {row["name"] for row in cur.fetchall()}
         if "category_id" not in expense_cols_after:
@@ -231,8 +254,12 @@ def init_db(db_path: str) -> Dict[str, Any]:
                 cur.execute("ALTER TABLE expenses ADD COLUMN category_id INTEGER;")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_category_id ON expenses(category_id);")
             except Exception:
-                # Ignore alter errors; app remains functional without the column
                 pass
+
+        # If version exists and is older, bump to SCHEMA_VERSION (no-op changes)
+        current_version = _get_current_version(cur)
+        if current_version is not None and current_version < SCHEMA_VERSION:
+            _migrate(cur, current_version, SCHEMA_VERSION)
 
         conn.commit()
         return {"success": True, "error": None, "data": "initialized"}
@@ -277,7 +304,7 @@ def get_schema_version(db_path: str) -> Dict[str, Any]:
         cur = conn.cursor()
         cur.execute("SELECT version FROM schema_version LIMIT 1;")
         row = cur.fetchone()
-        version = row["version"] if row else None
+        version = int(row["version"]) if row else None
         return {"success": True, "error": None, "data": version}
     except Exception as e:
         return {"success": False, "error": str(e), "data": None}

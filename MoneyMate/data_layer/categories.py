@@ -4,6 +4,15 @@ import MoneyMate.data_layer.logging_config  # Ensure global logging configuratio
 
 logger = logging.getLogger(__name__)
 
+def _order_clause(order: str) -> str:
+    mapping = {
+        "name_asc": "ORDER BY name ASC, id ASC",
+        "name_desc": "ORDER BY name DESC, id DESC",
+        "created_asc": "ORDER BY created_at ASC, id ASC",
+        "created_desc": "ORDER BY created_at DESC, id DESC",
+    }
+    return mapping.get((order or "name_asc"), mapping["name_asc"])
+
 class CategoriesManager:
     """
     Manager class for handling category-related database operations.
@@ -39,15 +48,15 @@ class CategoriesManager:
                 return self.dict_response(False, "Category already exists for this user")
             return self.dict_response(False, str(e))
 
-    def get_categories(self, user_id, limit=None, offset=None):
+    def get_categories(self, user_id, order="name_asc", limit=None, offset=None):
         """
-        Lists categories for a given user, ordered by name ASC.
-        Supports optional pagination.
+        Lists categories for a given user.
+        Supports optional ordering and pagination.
         """
         try:
             with get_connection(self.db_path) as conn:
                 cur = conn.cursor()
-                sql = "SELECT id, name, description, color, icon FROM categories WHERE user_id = ? ORDER BY name ASC"
+                sql = f"SELECT id, name, description, color, icon FROM categories WHERE user_id = ? {_order_clause(order)}"
                 params = [user_id]
                 if limit is not None:
                     sql += " LIMIT ?"
@@ -61,7 +70,7 @@ class CategoriesManager:
                 {"id": r["id"], "name": r["name"], "description": r["description"], "color": r["color"], "icon": r["icon"]}
                 for r in rows
             ]
-            logger.info(f"Retrieved {len(cats)} categories for user {user_id}.")
+            logger.info(f"Retrieved {len(cats)} categories for user {user_id} (order={order}).")
             return self.dict_response(True, data=cats)
         except Exception as e:
             logger.error(f"Error retrieving categories for user {user_id}: {e}")
@@ -73,7 +82,7 @@ class CategoriesManager:
         Note: expenses referencing this category_id will be left as-is;
         consider cleaning or reassigning at a higher layer if needed.
 
-        Test behavior: for unauthorized/non-existent deletes, return success=True (deleted=0).
+        Idempotent semantics: always return success with deleted count.
         """
         try:
             with get_connection(self.db_path) as conn:
@@ -85,7 +94,6 @@ class CategoriesManager:
                 logger.warning(f"Delete category noop: id={category_id}, user={user_id} (not found or not owned).")
             else:
                 logger.info(f"Deleted category id={category_id} for user {user_id}.")
-            # For compatibility with existing tests, always return success with deleted count
             return self.dict_response(True, data={"deleted": deleted})
         except Exception as e:
             logger.error(f"Error deleting category id={category_id} for user {user_id}: {e}")
@@ -102,4 +110,5 @@ class CategoriesManager:
                 return cur.fetchone() is not None
         except Exception as e:
             logger.error(f"Error checking category existence id={category_id} for user {user_id}: {e}")
+
             return False

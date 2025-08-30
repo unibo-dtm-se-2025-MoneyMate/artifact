@@ -7,6 +7,7 @@ Follows best practices for modularity, dependency injection, configurability, er
 """
 
 import logging
+from typing import Any, Dict, Optional
 from .database import get_connection
 from werkzeug.security import generate_password_hash, check_password_hash
 
@@ -21,15 +22,15 @@ class UserManager:
     - Role management (preparation for future extensions)
     """
 
-    def __init__(self, db_path):
+    def __init__(self, db_path: str):
         self.db_path = db_path
 
-    def dict_response(self, success, error=None, data=None):
+    def dict_response(self, success: bool, error: Optional[str] = None, data: Any = None) -> Dict[str, Any]:
         """Returns a standardized dictionary for all API responses (MoneyMate convention)."""
         return {"success": success, "error": error, "data": data}
 
     # --- Internal helpers (best-effort, resilient if table does not exist) ---
-    def _log_access(self, user_id, action, ip_address=None, user_agent=None):
+    def _log_access(self, user_id: Optional[int], action: str, ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> None:
         """
         Append an entry into access_logs (if the table exists).
         Silently ignore errors to avoid impacting auth flows.
@@ -37,21 +38,18 @@ class UserManager:
         try:
             with get_connection(self.db_path) as conn:
                 cur = conn.cursor()
-                # Verify table existence once (cheap PRAGMA)
-                # Use sqlite_schema for consistency with other introspection queries
                 cur.execute("SELECT name FROM sqlite_schema WHERE type='table' AND name='access_logs';")
                 if cur.fetchone() is None:
-                    return  # schema not yet migrated; skip logging
+                    return
                 cur.execute(
                     "INSERT INTO access_logs (user_id, action, ip_address, user_agent) VALUES (?, ?, ?, ?)",
                     (user_id, action, ip_address, user_agent),
                 )
                 conn.commit()
         except Exception as e:
-            # Do not raise; only log
             logger.debug(f"Access log write skipped ({action}) for user {user_id}: {e}")
 
-    def register_user(self, username, password, role="user"):
+    def register_user(self, username: str, password: str, role: str = "user") -> Dict[str, Any]:
         """
         Register a new user.
         The password is securely hashed before saving.
@@ -61,61 +59,63 @@ class UserManager:
         Returns: dict {success, error, data}
         data: {"user_id": int} on success
         """
-        if not username or not password:
+        username_norm = username.strip() if isinstance(username, str) else username
+        password_norm = password.strip() if isinstance(password, str) else password
+        if not username_norm or not password_norm:
             logger.warning("Username and password are required for registration.")
             return self.dict_response(False, "Username and password are required")
-        if role == "admin" and password != "12345":
+        if role == "admin" and password_norm != "12345":
             logger.warning("Admin registration failed: password for admin must be '12345'")
             return self.dict_response(False, "Admin password must be '12345'")
-        password_hash = generate_password_hash(password)
+        password_hash = generate_password_hash(password_norm)
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute(
                     "INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)",
-                    (username, password_hash, role)
+                    (username_norm, password_hash, role)
                 )
                 conn.commit()
                 user_id = cursor.lastrowid
-            logger.info(f"Registered new user: {username} (id={user_id}, role={role})")
-            # Registration could be logged if needed (not a security event like auth)
+            logger.info(f"Registered new user: {username_norm} (id={user_id}, role={role})")
             return self.dict_response(True, data={"user_id": user_id})
         except Exception as e:
-            logger.error(f"Error registering user {username}: {e}")
+            logger.error(f"Error registering user {username_norm}: {e}")
             if "UNIQUE constraint failed" in str(e):
                 return self.dict_response(False, "Username already exists")
             return self.dict_response(False, str(e))
 
-    def login_user(self, username, password, ip_address=None, user_agent=None):
+    def login_user(self, username: str, password: str, ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> Dict[str, Any]:
         """
         Authenticate a user.
         Returns user_id and role if credentials are valid.
         Returns: dict {success, error, data}
         data: {"user_id": int, "role": str} on success
         """
-        if not username or not password:
+        username_norm = username.strip() if isinstance(username, str) else username
+        password_norm = password.strip() if isinstance(password, str) else password
+        if not username_norm or not password_norm:
             logger.warning("Username and password are required for authentication.")
             return self.dict_response(False, "Username and password are required")
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT id, password_hash, role FROM users WHERE username = ?", (username,))
+                cursor.execute("SELECT id, password_hash, role FROM users WHERE username = ?", (username_norm,))
                 row = cursor.fetchone()
-            if row and check_password_hash(row[1], password):
-                logger.info(f"User authenticated successfully: {username}")
+            if row and check_password_hash(row[1], password_norm):
+                logger.info(f"User authenticated successfully: {username_norm}")
                 self._log_access(user_id=row[0], action="login", ip_address=ip_address, user_agent=user_agent)
                 return self.dict_response(True, data={"user_id": row[0], "role": row[2]})
             else:
-                logger.warning(f"Invalid credentials for user: {username}")
-                # If we know the user id (username exists), log failed_login with that id
+                logger.warning(f"Invalid credentials for user: {username_norm}")
                 uid = row[0] if row else None
                 self._log_access(user_id=uid, action="failed_login", ip_address=ip_address, user_agent=user_agent)
                 return self.dict_response(False, "Invalid credentials")
         except Exception as e:
-            logger.error(f"Error authenticating user {username}: {e}")
+            logger.error(f"Error authenticating user {username_norm}: {e}")
             return self.dict_response(False, str(e))
 
-    def logout_user(self, user_id, ip_address=None, user_agent=None):
+    def logout_user(self, user_id: int, ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> Dict[str, Any]:
         """
         Log user logout event in access_logs (best-effort).
         Returns: dict {success, error, data}
@@ -124,12 +124,14 @@ class UserManager:
         logger.info(f"User logout logged for user_id {user_id}")
         return self.dict_response(True)
 
-    def change_password(self, user_id, old_password, new_password):
+    def change_password(self, user_id: int, old_password: str, new_password: str) -> Dict[str, Any]:
         """
         Change password for a user, requires old password for confirmation.
         Returns: dict {success, error, data}
         """
-        if not new_password:
+        new_norm = new_password.strip() if isinstance(new_password, str) else new_password
+        old_norm = old_password.strip() if isinstance(old_password, str) else old_password
+        if not new_norm:
             logger.warning("New password is required for password change.")
             return self.dict_response(False, "New password is required")
         try:
@@ -137,10 +139,10 @@ class UserManager:
                 cursor = conn.cursor()
                 cursor.execute("SELECT password_hash FROM users WHERE id = ?", (user_id,))
                 row = cursor.fetchone()
-                if not row or not check_password_hash(row[0], old_password):
+                if not row or not check_password_hash(row[0], old_norm):
                     logger.warning(f"Password change failed: old password incorrect for user_id {user_id}")
                     return self.dict_response(False, "Old password incorrect")
-                new_hash = generate_password_hash(new_password)
+                new_hash = generate_password_hash(new_norm)
                 cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user_id))
                 conn.commit()
             logger.info(f"Password changed successfully for user_id {user_id}")
@@ -150,16 +152,16 @@ class UserManager:
             logger.error(f"Error changing password for user_id {user_id}: {e}")
             return self.dict_response(False, str(e))
 
-    def reset_password(self, admin_user_id, target_user_id, new_password):
+    def reset_password(self, admin_user_id: int, target_user_id: int, new_password: str) -> Dict[str, Any]:
         """
         Reset password for another user (admin only).
         Returns: dict {success, error, data}
         """
-        if not new_password:
+        new_norm = new_password.strip() if isinstance(new_password, str) else new_password
+        if not new_norm:
             logger.warning("New password required for password reset.")
             return self.dict_response(False, "New password is required")
         try:
-            # Check admin privileges
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT role FROM users WHERE id = ?", (admin_user_id,))
@@ -167,8 +169,7 @@ class UserManager:
                 if not admin_row or admin_row[0] != "admin":
                     logger.warning(f"Password reset failed: user_id {admin_user_id} is not admin")
                     return self.dict_response(False, "Admin privileges required")
-                # Reset password for target user
-                new_hash = generate_password_hash(new_password)
+                new_hash = generate_password_hash(new_norm)
                 cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, target_user_id))
                 conn.commit()
             logger.info(f"Password reset for user_id {target_user_id} by admin {admin_user_id}")
@@ -178,7 +179,7 @@ class UserManager:
             logger.error(f"Error resetting password for user_id {target_user_id}: {e}")
             return self.dict_response(False, str(e))
 
-    def get_user_role(self, user_id):
+    def get_user_role(self, user_id: int) -> Dict[str, Any]:
         """
         Get the role of a user.
         Returns: dict {success, error, data}
@@ -195,7 +196,7 @@ class UserManager:
             logger.error(f"Error fetching role for user_id {user_id}: {e}")
             return self.dict_response(False, str(e))
 
-    def set_user_role(self, admin_user_id, target_user_id, new_role):
+    def set_user_role(self, admin_user_id: int, target_user_id: int, new_role: str) -> Dict[str, Any]:
         """
         Update the role of a user (admin only).
         Returns: dict {success, error, data}
@@ -205,7 +206,6 @@ class UserManager:
             logger.warning(f"Attempted to set invalid role '{new_role}' for user_id {target_user_id}")
             return self.dict_response(False, f"Role must be one of {allowed_roles}")
         try:
-            # Check admin privileges
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute("SELECT role FROM users WHERE id = ?", (admin_user_id,))
@@ -213,7 +213,6 @@ class UserManager:
                 if not admin_row or admin_row[0] != "admin":
                     logger.warning(f"Role change failed: user_id {admin_user_id} is not admin")
                     return self.dict_response(False, "Admin privileges required")
-                # Update target user's role
                 cursor.execute("UPDATE users SET role = ? WHERE id = ?", (new_role, target_user_id))
                 conn.commit()
             logger.info(f"Role for user_id {target_user_id} set to '{new_role}' by admin {admin_user_id}")

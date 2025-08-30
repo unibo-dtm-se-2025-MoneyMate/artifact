@@ -1,6 +1,7 @@
 from .database import get_connection
 from .validation import validate_expense
 import logging
+from datetime import datetime
 import MoneyMate.data_layer.logging_config  # Assicura che la configurazione sia sempre attiva
 
 logger = logging.getLogger(__name__)
@@ -89,6 +90,63 @@ class ExpensesManager:
             logger.error(f"Error adding expense '{title}': {e}")
             return self.dict_response(False, str(e))
 
+    def update_expense(self, expense_id, user_id, title=None, price=None, date=None, category=None, category_id=None):
+        """
+        Partially update an expense that belongs to the user.
+        Validates provided fields; ignores None fields.
+        Returns {'updated': 0|1}.
+        """
+        fields = {}
+        # Validate provided fields
+        if title is not None:
+            title_norm = title.strip() if isinstance(title, str) else title
+            if not title_norm:
+                return self.dict_response(False, "Missing title")
+            fields["title"] = title_norm
+        if price is not None:
+            try:
+                price_val = float(price)
+            except Exception:
+                return self.dict_response(False, "Invalid price")
+            if price_val <= 0:
+                return self.dict_response(False, "Price must be positive")
+            fields["price"] = price_val
+        if date is not None:
+            try:
+                datetime.strptime(date, "%Y-%m-%d")
+            except Exception:
+                return self.dict_response(False, "Invalid date format (YYYY-MM-DD required)")
+            fields["date"] = date
+        if category is not None:
+            category_norm = category.strip() if isinstance(category, str) else category
+            if category_norm is None or category_norm == "":
+                return self.dict_response(False, "All fields required")
+            fields["category"] = category_norm
+        try:
+            with get_connection(self.db_path) as conn:
+                include_category_fk = self._has_column(conn, "expenses", "category_id")
+                if category_id is not None:
+                    if not include_category_fk:
+                        return self.dict_response(False, "Categories not supported by schema")
+                    if not self._category_belongs_to_user(conn, category_id, user_id):
+                        return self.dict_response(False, "Invalid category for this user")
+                    fields["category_id"] = category_id
+
+                if not fields:
+                    return self.dict_response(False, "No fields to update")
+
+                set_frag = ", ".join(f"{k} = ?" for k in fields.keys())
+                params = list(fields.values()) + [expense_id, user_id]
+                cursor = conn.cursor()
+                cursor.execute(f"UPDATE expenses SET {set_frag} WHERE id = ? AND user_id = ?", tuple(params))
+                updated = cursor.rowcount or 0
+                conn.commit()
+            logger.info(f"Updated expense id={expense_id} for user {user_id}, updated={updated}.")
+            return self.dict_response(True, data={"updated": updated})
+        except Exception as e:
+            logger.error(f"Error updating expense id={expense_id} for user {user_id}: {e}")
+            return self.dict_response(False, str(e))
+
     def get_expenses(self, user_id, order="date_desc", limit=None, offset=None, date_from=None, date_to=None):
         """
         Returns all expenses for a specific user as a list of dicts.
@@ -174,6 +232,7 @@ class ExpensesManager:
     def delete_expense(self, expense_id, user_id):
         """
         Deletes a specific expense by ID, only if it belongs to the user.
+        Idempotent semantics: always returns success with deleted count.
         """
         try:
             with get_connection(self.db_path) as conn:
@@ -182,9 +241,9 @@ class ExpensesManager:
                 deleted = cursor.rowcount or 0
                 conn.commit()
             if deleted == 0:
-                logger.warning(f"Error deleting expense with ID {expense_id} for user {user_id}: not found or not owned by user.")
-                return self.dict_response(False, "Expense not found or not owned by user")
-            logger.info(f"Deleted expense with ID {expense_id} for user {user_id}.")
+                logger.warning(f"Delete expense noop: id={expense_id}, user={user_id} (not found or not owned).")
+            else:
+                logger.info(f"Deleted expense with ID {expense_id} for user {user_id}.")
             return self.dict_response(True, data={"deleted": deleted})
         except Exception as e:
             logger.error(f"Error deleting expense with ID {expense_id} for user {user_id}: {e}")

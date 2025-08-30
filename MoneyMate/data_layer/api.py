@@ -15,21 +15,32 @@ Extended:
 - API now forwards 'role' to user registration and 'is_admin' to transactions listing
 - Optional category_id for expenses (backward compatible)
 - Deterministic ordering and optional pagination/filtering for listings
+- Thread-safe DatabaseManager singleton via double-checked locking
+- Update APIs for expenses and transactions
+- Contact balance API for user+contact breakdown
 """
 
 from MoneyMate.data_layer.manager import DatabaseManager
 import logging
+import threading
 import MoneyMate.data_layer.logging_config  # Ensure global logging configuration
 
 logger = logging.getLogger(__name__)
 
 _db = None
+_db_lock = threading.Lock()
 
 def get_db():
+    """
+    Return a process-wide DatabaseManager instance.
+    Thread-safe (double-checked locking).
+    """
     global _db
     if _db is None:
-        logger.info("Creating new DatabaseManager instance with default DB path.")
-        _db = DatabaseManager()
+        with _db_lock:
+            if _db is None:
+                logger.info("Creating new DatabaseManager instance with default DB path.")
+                _db = DatabaseManager()
     return _db
 
 def set_db_path(db_path):
@@ -37,21 +48,23 @@ def set_db_path(db_path):
     Set the database path for the API module.
     This allows tests or other modules to use a custom database file.
     If db_path is None, releases the global _db reference for proper cleanup.
+    Thread-safe with the same lock used in get_db.
     """
     global _db
-    if db_path is None:
-        logger.info("Releasing DatabaseManager instance (cleanup).")
-        try:
+    with _db_lock:
+        if db_path is None:
+            logger.info("Releasing DatabaseManager instance (cleanup).")
+            try:
+                if _db is not None and hasattr(_db, "close"):
+                    _db.close()
+            finally:
+                _db = None
+        else:
+            logger.info(f"Setting DatabaseManager db_path to: {db_path}")
+            # Close existing manager (if any) before swapping
             if _db is not None and hasattr(_db, "close"):
                 _db.close()
-        finally:
-            _db = None
-    else:
-        logger.info(f"Setting DatabaseManager db_path to: {db_path}")
-        # Close existing manager (if any) before swapping
-        if _db is not None and hasattr(_db, "close"):
-            _db.close()
-        _db = DatabaseManager(db_path)
+            _db = DatabaseManager(db_path)
 
 # --- UTILITY ---
 
@@ -137,8 +150,7 @@ def api_get_categories(user_id, order="name_asc", limit=None, offset=None):
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_get_categories (user_id={user_id}, order={order}, limit={limit}, offset={offset})")
-    # Categories are returned ordered by name ASC in the manager; forward pagination hints
-    return get_db().categories.get_categories(user_id, limit=limit, offset=offset)
+    return get_db().categories.get_categories(user_id, order=order, limit=limit, offset=offset)
 
 def api_delete_category(category_id, user_id):
     """
@@ -162,6 +174,17 @@ def api_add_expense(title, price, date, category, user_id, category_id=None):
     )
     return get_db().expenses.add_expense(title, price, date, category, user_id, category_id=category_id)
 
+def api_update_expense(expense_id, user_id, title=None, price=None, date=None, category=None, category_id=None):
+    """
+    Update an existing expense (partial updates allowed) if it belongs to the user.
+    Returns: dict {success, error, data: {'updated': int}}
+    """
+    logger.info(
+        f"API call: api_update_expense (expense_id={expense_id}, user_id={user_id}, "
+        f"title={title}, price={price}, date={date}, category={category}, category_id={category_id})"
+    )
+    return get_db().expenses.update_expense(expense_id, user_id, title=title, price=price, date=date, category=category, category_id=category_id)
+
 def api_get_expenses(user_id, order="date_desc", limit=None, offset=None, date_from=None, date_to=None):
     """
     List all expenses for the specified user.
@@ -183,7 +206,7 @@ def api_search_expenses(query, user_id, order="date_desc", limit=None, offset=No
 def api_delete_expense(expense_id, user_id):
     """
     Delete an expense by id for the specified user.
-    Returns: dict {success, error, data}
+    Returns: dict {success, error, data: {'deleted': int}}
     """
     logger.info(f"API call: api_delete_expense (expense_id={expense_id}, user_id={user_id})")
     return get_db().expenses.delete_expense(expense_id, user_id)
@@ -213,12 +236,12 @@ def api_get_contacts(user_id, order="name_asc"):
     Returns: dict {success, error, data}
     """
     logger.info(f"API call: api_get_contacts (user_id={user_id}, order={order})")
-    return get_db().contacts.get_contacts(user_id)
+    return get_db().contacts.get_contacts(user_id, order=order)
 
 def api_delete_contact(contact_id, user_id):
     """
     Delete a contact by id for the specified user.
-    Returns: dict {success, error, data}
+    Returns: dict {success, error, data: {'deleted': int}}
     """
     logger.info(f"API call: api_delete_contact (contact_id={contact_id}, user_id={user_id})")
     return get_db().contacts.delete_contact(contact_id, user_id)
@@ -236,6 +259,17 @@ def api_add_transaction(from_user_id, to_user_id, type_, amount, date, descripti
     )
     return get_db().transactions.add_transaction(from_user_id, to_user_id, type_, amount, date, description, contact_id)
 
+def api_update_transaction(transaction_id, user_id, type_=None, amount=None, date=None, description=None, contact_id=None):
+    """
+    Update a transaction if the user is the sender (partial updates allowed).
+    Returns: dict {success, error, data: {'updated': int}}
+    """
+    logger.info(
+        f"API call: api_update_transaction (transaction_id={transaction_id}, user_id={user_id}, "
+        f"type={type_}, amount={amount}, date={date}, description={description}, contact_id={contact_id})"
+    )
+    return get_db().transactions.update_transaction(transaction_id, user_id, type_=type_, amount=amount, date=date, description=description, contact_id=contact_id)
+
 def api_get_transactions(user_id, as_sender=True, is_admin=False, order="date_desc", limit=None, offset=None, date_from=None, date_to=None, contact_id=None):
     """
     List transactions for the user.
@@ -252,7 +286,7 @@ def api_get_transactions(user_id, as_sender=True, is_admin=False, order="date_de
 def api_delete_transaction(transaction_id, user_id):
     """
     Delete a transaction by id if the user is the sender.
-    Returns: dict {success, error, data}
+    Returns: dict {success, error, data: {'deleted': int}}
     """
     logger.info(f"API call: api_delete_transaction (transaction_id={transaction_id}, user_id={user_id})")
     return get_db().transactions.delete_transaction(transaction_id, user_id)
@@ -280,3 +314,12 @@ def api_get_user_balance_breakdown(user_id):
     """
     logger.info(f"API call: api_get_user_balance_breakdown (user_id={user_id})")
     return get_db().transactions.get_user_balance_breakdown(user_id)
+
+def api_get_contact_balance(user_id, contact_id):
+    """
+    Get balance breakdown for a specific contact from the sender's perspective
+    (only transactions where the user is sender and contact_id matches).
+    Returns: dict {success, error, data: {credits_sent, debits_sent, net}}
+    """
+    logger.info(f"API call: api_get_contact_balance (user_id={user_id}, contact_id={contact_id})")
+    return get_db().transactions.get_contact_balance(user_id, contact_id)
