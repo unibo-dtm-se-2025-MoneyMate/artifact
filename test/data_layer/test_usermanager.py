@@ -10,7 +10,8 @@ This test file covers:
 - Admin registration and forced password
 - Role logic: user/admin/upgrade
 - Change and reset password (role check)
-- Access logs auditing for login, failed_login, password_change, password_reset
+- Access logs auditing for login, failed_login, password_change, password_reset, logout
+- Additional edge cases: invalid role assignment, role query for non-existent user
 """
 
 import pytest
@@ -180,6 +181,35 @@ def test_access_logs_auditing():
     assert get_count("password_change", user_id) == base_change + 1
     assert get_count("password_reset", user_id) == base_reset + 1
     assert get_count("logout", user_id) == base_logout + 1
+
+    db.close()
+    gc.collect()
+
+def test_user_role_invalid_and_role_query_nonexistent():
+    """
+    Additional robustness:
+    - Setting an invalid role should fail with a clear error.
+    - Querying role for a non-existent user should return an error.
+    """
+    db = DatabaseManager(TEST_DB)
+    # Admin + user for role change
+    adm = db.users.register_user("role_admin", "12345", role="admin")
+    assert adm["success"]
+    admin_id = adm["data"]["user_id"]
+    usr = db.users.register_user("role_user", "pw")
+    assert usr["success"]
+    user_id = usr["data"]["user_id"]
+
+    bad = db.users.set_user_role(admin_id, user_id, "superuser")
+    assert isinstance(bad, dict)
+    assert not bad["success"]
+    assert "role" in (bad["error"] or "").lower()
+
+    # Non-existent user_id
+    notfound = db.users.get_user_role(999999)
+    assert isinstance(notfound, dict)
+    assert not notfound["success"]
+    assert "not found" in (notfound["error"] or "").lower()
 
     db.close()
     gc.collect()
