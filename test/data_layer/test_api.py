@@ -16,6 +16,11 @@ This test module verifies:
   - add expense with valid category_id
 - Balance analytics:
   - NET balance and detailed breakdown semantics
+- Update APIs:
+  - api_update_expense partial updates
+  - api_update_transaction partial updates (sender-only)
+- Contact balance:
+  - api_get_contact_balance returns credits_sent, debits_sent, net for a contact (sender perspective)
 - API contract:
   - all endpoints return dicts with success/error/data
 - Health:
@@ -34,6 +39,8 @@ from MoneyMate.data_layer.api import (
     api_get_transactions, api_get_user_balance,
     set_db_path, api_register_user, api_login_user,
     api_get_user_net_balance, api_get_user_balance_breakdown, api_health,
+    # New APIs under test
+    api_update_expense, api_update_transaction, api_get_contact_balance,
 )
 from MoneyMate.data_layer.manager import DatabaseManager
 from MoneyMate.data_layer.database import get_connection
@@ -331,3 +338,80 @@ def test_api_health_returns_schema_version():
     assert isinstance(res, dict)
     assert res["success"]
     assert isinstance(res["data"], int)
+
+# --- New API tests: update and contact balance ---
+
+def test_api_update_expense_partial():
+    """
+    Verify api_update_expense supports partial updates and changes are reflected in listings.
+    """
+    uid = _ensure_user("upd_exp_user_api", "pw")
+
+    # Create expense
+    assert api_add_expense("E1", 10, "2025-08-19", "Food", uid)["success"]
+    # Fetch its id
+    e = next(e for e in api_get_expenses(uid)["data"] if e["title"] == "E1")
+    eid = e["id"]
+
+    # Update price and title
+    up = api_update_expense(eid, uid, title="E1-upd", price=12.5)
+    assert isinstance(up, dict) and up["success"]
+    assert "updated" in up["data"]
+
+    # Verify changes
+    items = api_get_expenses(uid)["data"]
+    m = next(x for x in items if x["id"] == eid)
+    assert m["title"] == "E1-upd"
+    assert float(m["price"]) == 12.5
+
+def test_api_update_transaction_and_sender_only():
+    """
+    Verify api_update_transaction allows partial updates for the sender,
+    and that a receiver attempting to update gets updated=0 (no-op).
+    """
+    sender = _ensure_user("upd_trx_sender_api", "pw")
+    receiver = _ensure_user("upd_trx_receiver_api", "pw")
+
+    # Create a transaction
+    assert api_add_transaction(sender, receiver, "credit", 30, "2025-08-19", "init")["success"]
+    tr = api_get_transactions(sender)["data"][0]
+    tid = tr["id"]
+
+    # Sender updates amount and description
+    up_sender = api_update_transaction(tid, sender, amount=45, description="updated")
+    assert up_sender["success"]
+    assert up_sender["data"]["updated"] in (0, 1)  # updated likely 1
+
+    # Verify update via listing
+    cur = api_get_transactions(sender)["data"][0]
+    assert float(cur["amount"]) == 45
+    assert cur["description"] == "updated"
+
+    # Receiver attempts to update -> should be a no-op (updated=0)
+    up_receiver = api_update_transaction(tid, receiver, description="receiver-update-ignored")
+    assert isinstance(up_receiver, dict) and up_receiver["success"]
+    assert up_receiver["data"]["updated"] == 0
+
+def test_api_contact_balance_sender_perspective():
+    """
+    Verify api_get_contact_balance computes credits_sent, debits_sent, net for a specific contact from the sender's perspective.
+    """
+    sender = _ensure_user("contact_bal_sender", "pw")
+    receiver = _ensure_user("contact_bal_receiver", "pw")
+
+    # Create a contact for sender and get its id
+    assert api_add_contact("CarloAPI", sender)["success"]
+    contacts = api_get_contacts(sender)
+    assert contacts["success"] and contacts["data"]
+    contact_id = next(c["id"] for c in contacts["data"] if c["name"] == "CarloAPI")
+
+    # Add transactions tied to that contact (sender -> receiver)
+    assert api_add_transaction(sender, receiver, "credit", 30, "2025-08-19", "loan", contact_id=contact_id)["success"]
+    assert api_add_transaction(sender, receiver, "debit", 10, "2025-08-19", "repay", contact_id=contact_id)["success"]
+
+    bal = api_get_contact_balance(sender, contact_id)
+    assert isinstance(bal, dict) and bal["success"]
+    data = bal["data"]
+    assert data["credits_sent"] == 30
+    assert data["debits_sent"] == 10
+    assert data["net"] == 20
