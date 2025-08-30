@@ -127,10 +127,23 @@ class TransactionsManager:
     def delete_transaction(self, transaction_id, user_id):
         """
         Deletes a transaction by id if the user is the sender.
+        Returns an authorization error if the transaction exists but belongs to another user,
+        and a not-found error if the transaction does not exist.
         """
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
+                # First, check if the transaction exists and who owns it
+                cursor.execute("SELECT from_user_id FROM transactions WHERE id = ?", (transaction_id,))
+                row = cursor.fetchone()
+                if row is None:
+                    logger.warning(f"Delete failed: transaction id={transaction_id} not found for user {user_id}.")
+                    return self.dict_response(False, "Transaction not found")
+                owner_id = row[0]
+                if owner_id != user_id:
+                    logger.warning(f"Delete not authorized: user {user_id} is not sender of transaction id={transaction_id} (owner={owner_id}).")
+                    return self.dict_response(False, "Not authorized to delete this transaction")
+                # Authorized: perform delete
                 cursor.execute("DELETE FROM transactions WHERE id = ? AND from_user_id = ?", (transaction_id, user_id))
                 conn.commit()
             logger.info(f"Deleted transaction with ID {transaction_id} for user {user_id}.")
