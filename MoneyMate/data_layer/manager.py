@@ -14,15 +14,11 @@ Design principles:
   supporting future scalability, and facilitating CI/CD workflows (e.g. GitHub Actions).
 
 Usage:
-    db = DatabaseManager()
-    db.expenses.add_expense(...)
-    db.contacts.get_contacts()
-    db.transactions.get_contact_balance(...)
-    db.users.register_user(...)
-    db.users.change_password(...)
-    db.users.reset_password(...)
-    db.users.get_user_role(...)
-    db.users.set_user_role(...)
+    with DatabaseManager() as db:
+        db.expenses.add_expense(...)
+        db.contacts.get_contacts()
+        db.transactions.get_contact_balance(...)
+        db.users.register_user(...)
 """
 
 from .database import DB_PATH, list_tables, init_db
@@ -42,6 +38,17 @@ class DatabaseManager:
     Central orchestrator for entity managers.
     Provides a unified interface for all data operations.
     """
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            self.close()
+        except Exception:
+            pass
+        return False  # don't suppress exceptions
+
     def close(self):
         """
         Release all entity managers for test cleanup.
@@ -102,8 +109,8 @@ class DatabaseManager:
         List all tables in the database.
         Useful for testing and diagnostics.
         """
-        logger.info(f"Listing tables for db_path: {self.expenses.db_path}")
-        return list_tables(db_path=self.expenses.db_path)
+        logger.info(f"Listing tables for db_path: {self.db_path}")
+        return list_tables(db_path=self.db_path)
     
 
     def set_db_path(self, db_path):
