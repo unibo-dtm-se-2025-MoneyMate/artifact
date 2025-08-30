@@ -70,7 +70,10 @@ Notes:
 ```
 <root directory>
 ├── MoneyMate/
+│   ├── __init__.py
+│   ├── __main__.py
 │   └── data_layer/
+│       ├── __init__.py
 │       ├── api.py
 │       ├── categories.py
 │       ├── contacts.py
