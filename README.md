@@ -1,46 +1,67 @@
 # MoneyMate - Data Layer
 
-## Overview
+A modular, validated, and fully tested Python data layer for a simple personal finance app. It manages users, contacts, categories, expenses, and user-to-user transactions with SQLite, providing:
+- Clear Python APIs that return standardized results
+- Strong application-level validation
+- Deterministic listings (stable ordering), pagination, and filters
+- Auditing of auth events (best-effort)
+- Structured logging across all operations
+- A thread-safe API facade with a process-wide DatabaseManager singleton
 
-MoneyMate Data Layer manages persistence and business logic for users, categories, expenses, contacts, and transactions using SQLite.
-It provides a modular, validated, and fully tested Python API with deterministic listings, pagination, and auditing, following software engineering best practices.
+This README documents the overall design, features, schema, APIs, and testing approach.
 
 ---
 
 ## Features
 
-- Robust SQLite schema: auto-created and versioned; safe connection handling (context managers).
-- User accounts and roles: register, login/logout, change/reset password; roles: user/admin with admin-only actions.
-- Admin registration code: "12345" (academic policy, NOT for production).
-- Best-effort auditing: records login, logout, failed_login, password_change, password_reset into access_logs.
-- Entity managers: dedicated Python classes for users, expenses, contacts, transactions, and categories.
-- Unified API: every operation returns a standardized dictionary: {"success", "error", "data"}.
-- Strong validation: inputs validated before DB operations; clear error messages.
-- Deterministic listings: stable ordering for reliable UX and tests.
-- Pagination and filters: limit, offset, date_from, date_to on expenses and transactions; pagination on categories.
-- Search: case-insensitive expense search by title/category.
-- Category behavior: per-user categories; expenses keep category_id after category deletion (no hard FK).
-- Structured logging: consistent logs with module, level, and message; opt-in root logging via MONEYMATE_CONFIGURE_LOGGING=1.
-- Configurable DB path: change at runtime for tests/environments.
-- Row access convenience: sqlite3.Row row_factory for dict-like access.
-- Comprehensive unit tests: modules and APIs covered.
+- SQLite schema and migrations
+  - Automatic schema initialization on first use
+  - Foreign keys enabled; indices for common queries
+  - Constraints on new DBs (amount/price > 0, sender != receiver)
+  - Simple schema_version table to represent a versioned baseline
+  - sqlite3.Row row_factory for dict-like access
+- Entity managers (single responsibility)
+  - Users, Contacts, Categories, Expenses, Transactions
+- Unified API Facade
+  - All operations return a dict: {"success", "error", "data"}
+  - Optional ordering, pagination, and filters are forwarded where supported
+- Validation and normalization
+  - Application-level validation for fields, types, ranges, and cross-entity ownership
+  - Trim/normalize inputs where applicable (e.g., contact/category names, expense updates)
+- Deterministic listings
+  - Stable default ORDER BY: date DESC for expenses/transactions; name ASC for contacts/categories
+- Search
+  - Case-insensitive search for expenses by title/category (legacy text)
+- Categories behavior
+  - Per-user categories; expenses may store an optional category_id
+  - No hard FK: deleting a category does not nullify the expense’s category_id (by design)
+- Logging and auditing
+  - INFO/WARN/ERROR logs across operations
+  - Best-effort access_logs for login/logout/failed_login/password_change/password_reset
+- Thread-safe API singleton
+  - Safe global access to the DatabaseManager; support for runtime DB path switching
 
 ---
 
 ## Database Schema
 
-| Table             | Fields                                                                                                                         |
-|-------------------|--------------------------------------------------------------------------------------------------------------------------------|
-| users             | id (PK), username (unique), password_hash, role ("user"|"admin")                                                               |
-| access_logs       | id (PK), user_id (nullable FK-like), action ("login"|"logout"|"failed_login"|"password_change"|"password_reset"), ts, ip, ua  |
-| categories        | id (PK), name (str), user_id (owner)                                                                                           |
-| expenses          | id (PK), title (str), price (float), date (YYYY-MM-DD), category_id (nullable, kept after category delete)                     |
-| contacts          | id (PK), name (str)                                                                                                            |
-| transactions      | id (PK), contact_id (FK), type (debit/credit), amount (float), date (YYYY-MM-DD), description (str)                            |
+Core tables (subset of columns):
+
+| Table         | Key Fields (subset)                                                                                       |
+|---------------|------------------------------------------------------------------------------------------------------------|
+| users         | id (PK), username (unique), password_hash, role ("user"/"admin"), created_at                              |
+| contacts      | id (PK), user_id (FK), name (unique per user), created_at                                                 |
+| categories    | id (PK), user_id (FK), name (unique per user), description, color, icon, created_at                       |
+| expenses      | id (PK), user_id (FK), title, price (> 0), date (YYYY-MM-DD), category (legacy text), category_id (opt)   |
+| transactions  | id (PK), from_user_id (FK), to_user_id (FK), type ("debit"/"credit"), amount (> 0), date, description, contact_id (FK, nullable), created_at, CHECK(from_user_id <> to_user_id) |
+| access_logs   | id (PK), user_id (nullable), action in {"login","logout","failed_login","password_change","password_reset"}, ip_address, user_agent, created_at |
+| notes         | id (PK), user_id (FK), expense_id/transaction_id/contact_id (one required), content, created_at           |
+| attachments   | id (PK), user_id (FK), expense_id/transaction_id/contact_id (one required), file_path, mime_type, size    |
 
 Notes:
-- Tables and indices are created automatically during initialization.
-- access_logs writes are best-effort and skipped safely if the table is not yet present.
+- PRAGMA foreign_keys=ON per connection.
+- Indices on frequently filtered fields (e.g., user_id, date, composites).
+- expenses.category_id is optional without a hard FK (historical preservation); ownership validation is enforced in code.
 
 ---
 
@@ -49,10 +70,7 @@ Notes:
 ```
 <root directory>
 ├── MoneyMate/
-│   ├── __init__.py
-│   ├── __main__.py
 │   └── data_layer/
-│       ├── __init__.py
 │       ├── api.py
 │       ├── categories.py
 │       ├── contacts.py
@@ -63,8 +81,7 @@ Notes:
 │       ├── transactions.py
 │       ├── usermanager.py
 │       └── validation.py
-│
-├── test/
+└── test/
 │   └── data_layer/
 │       ├── __init__.py
 │       ├── test_api.py
@@ -75,8 +92,8 @@ Notes:
 │       ├── test_logging.py
 │       ├── test_manager.py
 │       ├── test_transactions.py
+│       ├── test_usermanager.py
 │       └── test_validation.py
-│
 ├── .github/
 │   └── workflows/
 │       ├── check.yml
@@ -96,9 +113,7 @@ Notes:
 
 ## Usage
 
-### Database Initialization
-
-The database is created automatically and uses sqlite3.Row for convenient access:
+### Initialize a DatabaseManager
 
 ```python
 from MoneyMate.data_layer.manager import DatabaseManager
@@ -106,208 +121,271 @@ from MoneyMate.data_layer.manager import DatabaseManager
 # Default DB path: "moneymate.db"
 db = DatabaseManager()
 
-# Custom file (testing/production)
+# Custom DB file
 db = DatabaseManager("custom.db")
 
 # Context manager support
 with DatabaseManager("session.db") as db:
     tables = db.list_tables()
+    print(tables)
+```
+
+### Thread-safe API Facade (Singleton)
+
+```python
+from MoneyMate.data_layer.api import get_db, set_db_path, api_list_tables
+
+# Switch DB file for API calls (also supports cleanup with None)
+set_db_path("api_demo.db")
+
+# Thread-safe singleton manager (created lazily)
+db = get_db()
+
+print(api_list_tables())  # -> {"success": True, "error": None, "data": [...]}
 ```
 
 ---
 
-### User Accounts and Roles
+## Users and Roles
+
+Academic policy (for coursework): admin registration requires password "12345". Never use this policy in production.
 
 ```python
 from MoneyMate.data_layer.usermanager import UserManager
 
 um = UserManager("auth.db")
 
-# Register (admin registration requires password "12345" for academic purposes)
-um.register_user(username="alice", password="s3cret")           # role defaults to "user"
-um.register_user(username="root",  password="12345", role="admin")
+# Register users (role defaults to "user")
+um.register_user("alice", "s3cret")
+um.register_user("root", "12345", role="admin")  # academic admin code
 
-# Login / Logout (audited best-effort)
+# Login / Logout (audited best-effort if access_logs exists)
 login = um.login_user("alice", "s3cret", ip_address="127.0.0.1", user_agent="cli/1.0")
-# -> {"success": True, "error": None, "data": {"user_id": 1, "role": "user"}}
-
-um.logout_user(user_id=login["data"]["user_id"])
+uid = login["data"]["user_id"]
+um.logout_user(user_id=uid)
 
 # Change / Reset password
-um.change_password(user_id=1, old_password="s3cret", new_password="n3wpass")
-um.reset_password(admin_user_id=2, target_user_id=1, new_password="resetByAdmin")
+um.change_password(user_id=uid, old_password="s3cret", new_password="n3wpass")
+um.reset_password(admin_user_id=2, target_user_id=uid, new_password="resetByAdmin")
 
-# Get / Set role (admin-only for setting)
-um.get_user_role(user_id=1)
-um.set_user_role(admin_user_id=2, target_user_id=1, new_role="admin")
+# Role operations
+um.get_user_role(user_id=uid)
+um.set_user_role(admin_user_id=2, target_user_id=uid, new_role="admin")
 ```
 
-All methods return {"success", "error", "data"} and log meaningful warnings/errors; auditing writes to access_logs when available.
-
-> Important (academic policy): Admin registration currently requires the password "12345".
-> This is intended for coursework/testing only. Do not use this policy in production.
+All methods consistently return {"success", "error", "data"} and log meaningful events.
 
 ---
 
-### Entity Managers
+## Contacts and Categories
 
-CRUD and utilities for expenses, contacts, transactions, and categories.
+Contacts are owned by a single user. Categories are per-user and can be referenced by expenses via category_id (ownership validated).
 
 ```python
-# Expenses
-db.expenses.add_expense("Dinner", 25.5, "2025-08-19", category_id=1)
-db.expenses.get_expenses(limit=20, offset=0, date_from="2025-08-01", date_to="2025-08-31")
-db.expenses.search_expenses("Food")  # case-insensitive by title/category
-db.expenses.delete_expense(1)
-db.expenses.clear_expenses()
+# Contacts (manager layer)
+db.contacts.add_contact(name="Mario Rossi", user_id=1)
+db.contacts.get_contacts(user_id=1, order="name_asc")
+db.contacts.delete_contact(contact_id=10, user_id=1)  # {"deleted": 0 or 1}; logs "noop" if nothing deleted
 
-# Contacts
-db.contacts.add_contact("Mario Rossi")
-db.contacts.get_contacts()  # name ASC
-db.contacts.delete_contact(1)
-
-# Categories (per-user ownership validated on insert)
-db.categories.add_category("Food", user_id=1)
-db.categories.get_categories(limit=50, offset=0)  # name ASC
-db.categories.delete_category(1)  # expenses keep category_id (no hard FK)
-
-# Transactions
-db.transactions.add_transaction(contact_id=1, type_="credit", amount=50, date="2025-08-19", description="Loan")
-db.transactions.get_transactions(limit=20, offset=0, date_from="2025-08-01", date_to="2025-08-31")
-db.transactions.delete_transaction(1)
-db.transactions.get_contact_balance(contact_id=1)
+# Categories (manager layer)
+db.categories.add_category(user_id=1, name="Food", color="#ff0000", icon="🍎")
+db.categories.get_categories(user_id=1, order="name_asc", limit=50, offset=0)
+db.categories.delete_category(category_id=5, user_id=1)  # idempotent delete
 ```
-
-Deterministic ordering:
-- Expenses/Transactions: date DESC, id DESC
-- Contacts/Categories: name ASC
 
 ---
 
-### Unified API
+## Expenses
 
-High-level API functions forward ordering/pagination/filter params and keep a consistent response format.
+Validation: title required; price > 0; date "YYYY-MM-DD"; category (legacy text) required. Optionally link category_id if it belongs to the same user.
+
+```python
+# Add expense (manager layer)
+db.expenses.add_expense(
+    title="Dinner",
+    price=25.50,
+    date="2025-08-19",
+    category="Food",   # legacy text
+    user_id=1,
+    category_id=12     # optional; must belong to user_id=1 if provided
+)
+
+# List and search (deterministic ordering; pagination and date filters)
+db.expenses.get_expenses(user_id=1, order="date_desc", limit=10, offset=0, date_from="2025-08-01", date_to="2025-08-31")
+db.expenses.search_expenses("Food", user_id=1)
+
+# Partial update (normalizes and validates fields)
+db.expenses.update_expense(expense_id=3, user_id=1, title="Dinner with friends", price=27.00)
+
+# Delete (idempotent)
+db.expenses.delete_expense(expense_id=3, user_id=1)  # {"deleted": 1} or {"deleted": 0}
+db.expenses.clear_expenses(user_id=1)
+```
+
+---
+
+## Transactions
+
+Transactions are between two different users (from_user_id and to_user_id). The sender may link a contact they own (contact_id). Types are "debit" and "credit".
+
+```python
+# Add (validates: users exist, sender != receiver, amount/date/type valid, optional contact belongs to sender)
+db.transactions.add_transaction(
+    from_user_id=1, to_user_id=2, type_="credit", amount=50, date="2025-08-19",
+    description="Loan", contact_id=7
+)
+db.transactions.add_transaction(
+    from_user_id=1, to_user_id=2, type_="debit", amount=20, date="2025-08-20",
+    description="Repayment"
+)
+
+# List
+db.transactions.get_transactions(user_id=1, as_sender=True)    # sent by user 1
+db.transactions.get_transactions(user_id=1, as_sender=False)   # received by user 1
+
+# Admin visibility
+db.transactions.get_transactions(user_id=2, is_admin=True)     # only if user_id=2 has role 'admin'
+
+# Partial update (sender-only)
+db.transactions.update_transaction(transaction_id=10, user_id=1, amount=45, description="Updated note")
+
+# Delete (sender-only, idempotent)
+db.transactions.delete_transaction(transaction_id=10, user_id=1)  # {"deleted": 1} or {"deleted": 0}
+```
+
+### Balances
+
+Two semantics are provided:
+
+- Legacy (symmetric): credit − debit across all transactions where the user is sender or receiver.
+- Net (recommended): credits_received − debits_sent.
+
+```python
+# Legacy
+db.transactions.get_user_balance(user_id=1)  # {"success": True, "data": 30.0, ...} in example below
+
+# Net
+db.transactions.get_user_net_balance(user_id=1)  # {"success": True, "data": -20.0, ...}
+
+# Breakdown
+db.transactions.get_user_balance_breakdown(user_id=1)
+# -> {"credits_received": 0, "debits_sent": 20, "credits_sent": 50, "debits_received": 0, "net": -20, "legacy": 30}
+
+# Contact balance (sender perspective)
+db.transactions.get_contact_balance(user_id=1, contact_id=7)
+# -> {"credits_sent": X, "debits_sent": Y, "net": X - Y}
+```
+
+Example scenario (U1 -> U2: credit 50; U1 -> U2: debit 20):
+- U1 legacy = (0 + 50) - (20 + 0) = 30; net = 0 - 20 = -20
+- U2 legacy = (50 + 0) - (0 + 20) = 30; net = 50 - 0 = 50
+
+---
+
+## Unified API Facade
+
+All operations are also available via the high-level API in MoneyMate.data_layer.api. The API is thread-safe, logs every call, and forwards ordering/pagination/filtering where supported.
 
 ```python
 from MoneyMate.data_layer.api import (
-    api_add_expense, api_get_expenses, api_search_expenses,
-    api_delete_expense, api_clear_expenses,
+    set_db_path, get_db,
+    api_register_user, api_login_user, api_logout_user,
+    api_get_user_role, api_set_user_role, api_change_password, api_reset_password,
     api_add_contact, api_get_contacts, api_delete_contact,
-    api_add_transaction, api_get_transactions, api_delete_transaction,
-    api_get_contact_balance, set_db_path, api_list_tables,
-    api_add_category, api_get_categories, api_delete_category
+    api_add_category, api_get_categories, api_delete_category,
+    api_add_expense, api_update_expense, api_get_expenses, api_search_expenses, api_delete_expense, api_clear_expenses,
+    api_add_transaction, api_update_transaction, api_get_transactions, api_delete_transaction,
+    api_get_user_balance, api_get_user_net_balance, api_get_user_balance_breakdown, api_get_contact_balance,
+    api_list_tables, api_health,
 )
 
-set_db_path("test_api.db")  # Switch DB for API calls
+set_db_path("api_demo.db")
 
-res = api_add_expense("Lunch", 12, "2025-08-19", category_id=1)
-print(res)  # {'success': True, 'error': None, 'data': None}
+# Users
+u1 = api_register_user("alice", "pw")["data"]["user_id"]
+u2 = api_register_user("bob", "pw")["data"]["user_id"]
 
-# Pagination and filters example
-api_get_expenses(limit=10, offset=0, date_from="2025-08-01", date_to="2025-08-31")
-api_get_transactions(limit=10, offset=0)
-api_get_categories(limit=50, offset=0)
+# Contacts & Categories
+api_add_contact("Carlo", u1)
+api_add_category(user_id=u1, name="Food", color="#FF0000", icon="🍎")
+
+# Expenses
+api_add_expense(title="Lunch", price=12, date="2025-08-19", category="Food", user_id=u1)
+api_get_expenses(user_id=u1, limit=10, offset=0)
+api_search_expenses(query="Lunch", user_id=u1)
+
+# Transactions and balances
+api_add_transaction(from_user_id=u1, to_user_id=u2, type_="credit", amount=50, date="2025-08-19", description="Loan")
+api_add_transaction(from_user_id=u1, to_user_id=u2, type_="debit", amount=20, date="2025-08-20", description="Repayment")
+
+api_get_transactions(user_id=u1, as_sender=True)
+api_get_user_balance(u1)
+api_get_user_net_balance(u1)
+api_get_user_balance_breakdown(u1)
 ```
 
 ---
 
-### Validation & Error Handling
+## Validation & Error Handling
 
-- Expenses: title, price, date required; price > 0; date format "YYYY-MM-DD".
-- Contacts: name required.
-- Transactions: type in {"debit","credit"}, amount > 0, date "YYYY-MM-DD", contact must exist.
-- Categories: name required; ownership validated on insert.
-- Users: unique username; secure password hashing; admin registration policy ("12345" for academic use).
-- Clear delete semantics: category deletion returns success with deleted=0 when noop (per tests).
-- All API calls return {"success", "error", "data"}; errors are explicit and logged.
-
----
-
-### Logging
-
-- Structured logging across modules.
-- Root logging opt-in via environment variable:
-  - export MONEYMATE_CONFIGURE_LOGGING=1
-- Operation outcomes and validation errors are logged with appropriate levels.
+- Expenses: title (trimmed, required), price numeric > 0, date "YYYY-MM-DD", category (legacy text) required.
+- Contacts: name required (trimmed), unique per user.
+- Transactions: type ∈ {"debit","credit"} (case-insensitive), amount > 0, date "YYYY-MM-DD"; users must exist; sender != receiver; optional contact_id must belong to sender.
+- Categories: name required (trimmed), unique per user; optional attributes (description, color, icon).
+- Users: unique username; secure password hashing; academic admin registration policy ("12345"); auditing for auth events.
+- Idempotent delete: return success=True with data={"deleted": 0 or 1}; warnings logged on no-op.
+- All API/manager calls return {"success", "error", "data"} with explicit error messages and consistent logging.
 
 ---
 
-### Security & Privacy
+## Logging
 
-- Admin registration code: "12345" is an academic/testing policy to simplify evaluation. Do NOT use in production.
-  - For production, replace this policy with a secure onboarding flow or a configurable secret (e.g., set an environment variable like MONEYMATE_ADMIN_REG_CODE and update UserManager.register_user accordingly).
-  - Encourage immediate password change for any admin account created with this code.
-- Auditing may record IP address and user agent. Treat access_logs as potentially sensitive (PII). Enable and retain according to applicable privacy regulations.
-
----
-
-### Dynamic Database Path
-
-Change the database file at runtime:
-
-```python
-db.set_db_path("newfile.db")
-```
-
-Or via API:
-
-```python
-from MoneyMate.data_layer.api import set_db_path
-set_db_path("test_api.db")
-```
+- Module-level structured logs for diagnostics and test observability.
+- Root logger configuration can be disabled via environment variable:
+  - export MONEYMATE_CONFIGURE_LOGGING=false  # to disable
+  - export MONEYMATE_LOG_LEVEL=INFO          # to change level (default INFO)
 
 ---
 
-### API Response Format
+## Security & Privacy Notes
 
-```python
-{
-    "success": True/False,
-    "error": "Error message" or None,
-    "data": object/list/value or None
-}
-```
+- Admin registration code "12345" exists for academic/testing evaluation only; not for production use.
+- Access logs may record IP address and user agent; handle these as potentially sensitive.
 
 ---
 
 ## Automated Testing
 
-All modules and APIs are covered by unit tests in test/data_layer/.
+Unit tests verify modules and integrated APIs in test/data_layer/.
 
 ### Running Tests
 
-```shell
+```bash
 pytest test/data_layer/
 ```
 
 ### Test Coverage (high-level)
 
-- API integration: expenses, contacts, transactions, categories; DB switching; response format and errors.
-- Expenses: add/search/delete/clear; date format; deterministic ordering; pagination/filters.
-- Contacts: add/list/delete; name validation; deterministic ordering.
-- Categories: add/list/delete; ownership validation; preserved category_id behavior.
-- Transactions: add/list/delete; validations; balances; pagination/filters.
-- Users & roles: registration/login/logout; change/reset password; role get/set; auditing.
-- Logging: correct levels/messages for success, validation errors, and deletions.
-- Database/Manager: connection, table creation, list_tables, context manager behavior.
-- Validation utilities: success and error scenarios.
-
-Testing best practices:
-- Each test uses its own DB for isolation.
-- Both success and failure paths are covered.
-- Response format is always asserted.
+- API integration: expenses, contacts, transactions, categories, user flows; DB switching; response format and errors
+- Expenses: add/search/delete/clear; validation; deterministic ordering; pagination and date filters
+- Contacts: add/list/delete; name validation; ordering and uniqueness handling
+- Categories: add/list/delete; pagination and ownership; preserved category_id behavior
+- Transactions: add/list/delete; validation (users/contact/type/amount/date); admin visibility; balances (legacy/net/breakdown); filters
+- Users & roles: registration/login/logout; admin registration policy; change/reset password; role get/set; auditing (test_usermanager.py)
+- Logging: success and failure paths; idempotent delete "noop" warnings
+- Database/Manager: initialization, table listing, foreign keys, context manager semantics
+- Validation: direct validator functions for correct/incorrect inputs
 
 ---
 
 ## Software Engineering Principles
 
-- Single Responsibility & Modularity: managers per entity; minimal coupling.
-- Dependency Injection: managers accept dependencies explicitly where needed.
-- Configurability: parameterized DB path; environment-controlled logging.
-- Error Handling: explicit, consistent, and user-facing via standardized responses.
-- Determinism & Observability: stable ordering; extensive logging and auditing.
-- Resource Management: safe DB connections via context managers.
-- Documentation & Tests: rich docstrings; comprehensive examples and unit tests.
+- Modularity and single responsibility per manager
+- Dependency injection for cross-entity validation (e.g., TransactionsManager uses ContactsManager)
+- Configurability (DB path, logging via environment)
+- Determinism and observability (stable ordering, structured logs, auditing)
+- Resource management (short-lived connections; context managers)
+- Clear API contracts and comprehensive test coverage
 
 ---
 
@@ -316,7 +394,7 @@ Testing best practices:
 Data Layer & Architecture: Giovanardi  
 Repository: https://github.com/unibo-dtm-se-2025-MoneyMate/artifact
 
-For questions or support:
-- See docstrings and source.
-- Open an issue on GitHub.
-- Run tests to validate installation.
+For questions:
+- Refer to docstrings and source
+- Open an issue on GitHub
+- Run tests to validate the setup
