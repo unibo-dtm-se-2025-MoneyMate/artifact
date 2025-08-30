@@ -96,15 +96,16 @@ def test_delete_transaction(db):
 
 def test_receiver_cannot_delete_transaction(db):
     """
-    Authorization: the receiver should NOT be allowed to delete a transaction
-    where they are not the sender.
+    Authorization: the receiver should NOT be able to delete a transaction
+    they don't own (sender-only). With idempotent semantics, the call succeeds
+    but deletes 0 rows and logs a 'noop'.
     """
     db.transactions.add_transaction(db._from_user_id, db._to_user_id, "credit", 25, "2025-08-19", "Gift")
     tid = db.transactions.get_transactions(db._from_user_id)["data"][0]["id"]
     res = db.transactions.delete_transaction(tid, db._to_user_id)
     assert isinstance(res, dict)
-    assert not res["success"]
-    assert ("not authorized" in (res["error"] or "").lower()) or ("permission" in (res["error"] or "").lower())
+    assert res["success"]
+    assert res["data"]["deleted"] == 0
 
 def test_get_user_balance(db):
     """Test calculation of user balance (credit - debit)."""
