@@ -5,6 +5,15 @@ import MoneyMate.data_layer.logging_config  # Ensure global logging configuratio
 
 logger = logging.getLogger(__name__)
 
+def _order_clause(order: str) -> str:
+    mapping = {
+        "date_desc": "ORDER BY date DESC, id DESC",
+        "date_asc": "ORDER BY date ASC, id ASC",
+        "created_desc": "ORDER BY created_at DESC, id DESC",
+        "created_asc": "ORDER BY created_at ASC, id ASC",
+    }
+    return mapping.get((order or "date_desc"), mapping["date_desc"])
+
 class TransactionsManager:
     """
     Manager for user-to-user transactions: supports tracking debiti/crediti tra utenti.
@@ -78,42 +87,65 @@ class TransactionsManager:
                 cursor = conn.cursor()
                 cursor.execute("SELECT role FROM users WHERE id = ?", (user_id,))
                 row = cursor.fetchone()
-                return bool(row and row[0] == "admin")
+                return bool(row and row["role"] == "admin")
         except Exception as e:
             logger.error(f"Error checking admin role for user ID {user_id}: {e}")
             return False
 
-    def get_transactions(self, user_id, as_sender=True, is_admin=False):
+    def get_transactions(self, user_id, as_sender=True, is_admin=False, order="date_desc", limit=None, offset=None, date_from=None, date_to=None, contact_id=None):
         """
         Retrieves transactions from the database.
         If is_admin is True, validates the user's role and returns ALL transactions.
         If as_sender is True, returns those WHERE from_user_id=user_id.
         If False, returns those WHERE to_user_id=user_id.
+        Supports deterministic ordering, pagination, and optional date/contact filters.
         """
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
+                params = []
+                where_parts = []
                 if is_admin:
                     # Enforce role check instead of trusting the flag blindly
                     if not self._is_admin(user_id):
                         logger.warning(f"Transactions access denied: user {user_id} is not admin but requested is_admin=True.")
                         return self.dict_response(False, "Admin privileges required")
-                    cursor.execute("SELECT id, from_user_id, to_user_id, type, amount, date, description, contact_id FROM transactions")
-                elif as_sender:
-                    cursor.execute("SELECT id, from_user_id, to_user_id, type, amount, date, description, contact_id FROM transactions WHERE from_user_id = ?", (user_id,))
                 else:
-                    cursor.execute("SELECT id, from_user_id, to_user_id, type, amount, date, description, contact_id FROM transactions WHERE to_user_id = ?", (user_id,))
+                    if as_sender:
+                        where_parts.append("from_user_id = ?")
+                        params.append(user_id)
+                    else:
+                        where_parts.append("to_user_id = ?")
+                        params.append(user_id)
+                if contact_id is not None:
+                    where_parts.append("contact_id = ?")
+                    params.append(contact_id)
+                if date_from:
+                    where_parts.append("date >= ?")
+                    params.append(date_from)
+                if date_to:
+                    where_parts.append("date <= ?")
+                    params.append(date_to)
+                where_sql = (" WHERE " + " AND ".join(where_parts)) if where_parts else ""
+                sql = f"SELECT id, from_user_id, to_user_id, type, amount, date, description, contact_id FROM transactions{where_sql} {_order_clause(order)}"
+                if limit is not None:
+                    sql += " LIMIT ?"
+                    params.append(int(limit))
+                    if offset is not None:
+                        sql += " OFFSET ?"
+                        params.append(int(offset))
+                cursor.execute(sql, tuple(params))
                 rows = cursor.fetchall()
             transactions = [
                 {
-                    "id": r[0],
-                    "from_user_id": r[1],
-                    "to_user_id": r[2],
-                    "type": r[3],
-                    "amount": r[4],
-                    "date": r[5],
-                    "description": r[6],
-                    "contact_id": r[7]
+                    "id": r["id"],
+                    "from_user_id": r["from_user_id"],
+                    "to_user_id": r["to_user_id"],
+                    "type": r["type"],
+                    "amount": r["amount"],
+                    "date": r["date"],
+                    "description": r["description"],
+                    "contact_id": r["contact_id"]
                 }
                 for r in rows
             ]
@@ -139,15 +171,16 @@ class TransactionsManager:
                 if row is None:
                     logger.warning(f"Delete failed: transaction id={transaction_id} not found for user {user_id}.")
                     return self.dict_response(False, "Transaction not found")
-                owner_id = row[0]
+                owner_id = row["from_user_id"]
                 if owner_id != user_id:
                     logger.warning(f"Delete not authorized: user {user_id} is not sender of transaction id={transaction_id} (owner={owner_id}).")
                     return self.dict_response(False, "Not authorized to delete this transaction")
                 # Authorized: perform delete
                 cursor.execute("DELETE FROM transactions WHERE id = ? AND from_user_id = ?", (transaction_id, user_id))
+                deleted = cursor.rowcount or 0
                 conn.commit()
             logger.info(f"Deleted transaction with ID {transaction_id} for user {user_id}.")
-            return self.dict_response(True)
+            return self.dict_response(True, data={"deleted": deleted})
         except Exception as e:
             error_msg = f"Error deleting transaction with ID {transaction_id} for user {user_id}: {str(e)}"
             logger.error(error_msg)
@@ -159,16 +192,13 @@ class TransactionsManager:
         Calculates balance = total credit − total debit across ALL transactions
         where the user appears either as sender or receiver.
         """
-        CREDIT = "credit"
-        DEBIT = "debit"
-
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
                 # Sum all credits and debits where user is sender or receiver
                 cursor.execute(
                     """
-                    SELECT type, SUM(amount) FROM transactions
+                    SELECT type, SUM(amount) AS total FROM transactions
                     WHERE (from_user_id = ? OR to_user_id = ?)
                     GROUP BY type
                     """,
@@ -176,13 +206,15 @@ class TransactionsManager:
                 )
                 results = cursor.fetchall()
 
-            total_credit = 0
-            total_debit = 0
+            total_credit = 0.0
+            total_debit = 0.0
 
-            for transaction_type, total_amount in results:
-                if transaction_type == CREDIT:
+            for row in results:
+                transaction_type = row["type"]
+                total_amount = row["total"]
+                if transaction_type == "credit":
                     total_credit += total_amount
-                elif transaction_type == DEBIT:
+                elif transaction_type == "debit":
                     total_debit += total_amount
                 else:
                     logger.warning(f"Unknown transaction type '{transaction_type}' for user ID {user_id}")
@@ -199,8 +231,8 @@ class TransactionsManager:
     def get_user_net_balance(self, user_id):
         """
         NET semantics (recommended for GUI):
-        balance_net = credits_received (to_user_id=user AND type='credit')
-                       - debits_sent (from_user_id=user AND type='debit')
+        balance_net = credits_received (to_user_id=user AND type = 'credit')
+                       - debits_sent (from_user_id=user AND type = 'debit')
         This avoids symmetry between sender and receiver on the same transaction.
         """
         try:
@@ -216,8 +248,8 @@ class TransactionsManager:
                     (user_id, user_id)
                 )
                 row = cursor.fetchone()
-                credits_received = row[0] or 0
-                debits_sent = row[1] or 0
+                credits_received = row["credits_received"]
+                debits_sent = row["debits_sent"]
 
             balance_net = credits_received - debits_sent
             logger.info(f"(NET) Calculated net balance for user ID {user_id}: {balance_net} (credits_received={credits_received}, debits_sent={debits_sent})")
@@ -253,10 +285,10 @@ class TransactionsManager:
                     (user_id, user_id, user_id, user_id)
                 )
                 row = cursor.fetchone()
-                credits_received = row[0] or 0
-                debits_sent = row[1] or 0
-                credits_sent = row[2] or 0
-                debits_received = row[3] or 0
+                credits_received = row["credits_received"]
+                debits_sent = row["debits_sent"]
+                credits_sent = row["credits_sent"]
+                debits_received = row["debits_received"]
 
             net = credits_received - debits_sent
             legacy = (credits_received + credits_sent) - (debits_sent + debits_received)
