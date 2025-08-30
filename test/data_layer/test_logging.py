@@ -127,7 +127,14 @@ def test_transactions_logging(caplog, db):
 
     with caplog.at_level("INFO"):
         res_del = db.transactions.delete_transaction(9999, sender_id)
-        assert "Error deleting transaction" in caplog.text or "Deleted transaction" in caplog.text
+        # Accept explicit structured failures introduced by authorization/not-found checks,
+        # or success when a valid transaction is deleted.
+        assert (
+            "Deleted transaction" in caplog.text
+            or "Delete not authorized" in caplog.text
+            or "Delete failed" in caplog.text
+            or "Transaction not found" in caplog.text
+        )
 
     with caplog.at_level("INFO"):
         bal = db.transactions.get_user_balance(sender_id)
