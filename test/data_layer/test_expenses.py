@@ -72,6 +72,15 @@ def test_add_expense_invalid_fields(db, title, price, date, category, error_fiel
     assert not res["success"]
     assert error_field in res["error"].lower()
 
+def test_add_expense_non_numeric_price(db):
+    """
+    Adding an expense with a non-numeric price must fail with a clear 'price' error.
+    """
+    res = db.expenses.add_expense("BadPrice", "abc", "2025-08-19", "Misc", db._test_user_id)
+    assert isinstance(res, dict)
+    assert not res["success"]
+    assert ("price" in res["error"].lower()) or ("numeric" in res["error"].lower())
+
 def test_search_expenses(db):
     """
     Test searching for expenses by title or category for a user.
@@ -83,6 +92,18 @@ def test_search_expenses(db):
     assert isinstance(res, dict)
     assert res["success"]
     assert any("Taxi" in e["title"] for e in res["data"])
+
+def test_search_by_category_text(db):
+    """
+    Searching by category text should return only expenses matching that category name (legacy text field).
+    """
+    db.expenses.add_expense("Food1", 10, "2025-08-19", "Food", db._test_user_id)
+    db.expenses.add_expense("Transport1", 5, "2025-08-19", "Transport", db._test_user_id)
+    res = db.expenses.search_expenses("Food", db._test_user_id)
+    assert res["success"]
+    titles = {e["title"] for e in res["data"]}
+    assert "Food1" in titles
+    assert "Transport1" not in titles
 
 def test_delete_expense(db):
     """
