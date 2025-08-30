@@ -1,6 +1,7 @@
 from .database import get_connection
 from .validation import validate_transaction
 import logging
+from datetime import datetime
 import MoneyMate.data_layer.logging_config  # Ensure global logging configuration
 
 logger = logging.getLogger(__name__)
@@ -55,13 +56,70 @@ class TransactionsManager:
                 cursor = conn.cursor()
                 cursor.execute(
                     "INSERT INTO transactions (from_user_id, to_user_id, type, amount, date, description, contact_id) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (from_user_id, to_user_id, type_, amount, date, description, contact_id)
+                    (from_user_id, to_user_id, type_, float(amount), date, description, contact_id)
                 )
                 conn.commit()
             logger.info(f"Transaction from user {from_user_id} to user {to_user_id} of type '{type_}' and amount {amount} added successfully.")
             return self.dict_response(True)
         except Exception as e:
             error_msg = f"Error adding transaction from user {from_user_id} to user {to_user_id}: {str(e)}"
+            logger.error(error_msg)
+            return self.dict_response(False, error_msg)
+
+    def update_transaction(self, transaction_id, user_id, type_=None, amount=None, date=None, description=None, contact_id=None):
+        """
+        Partially update a transaction if the user is the sender (owner).
+        Validates provided fields; ignores None fields.
+        Returns {'updated': 0|1}.
+        """
+        fields = {}
+        # Validate provided fields
+        if type_ is not None:
+            type_norm = type_.lower().strip() if isinstance(type_, str) else None
+            if type_norm not in ("debit", "credit"):
+                return self.dict_response(False, "Invalid type (debit/credit)")
+            fields["type"] = type_norm
+        if amount is not None:
+            try:
+                amount_val = float(amount)
+            except Exception:
+                return self.dict_response(False, "Invalid amount")
+            if amount_val <= 0:
+                return self.dict_response(False, "Amount must be positive")
+            fields["amount"] = amount_val
+        if date is not None:
+            try:
+                datetime.strptime(date, "%Y-%m-%d")
+            except Exception:
+                return self.dict_response(False, "Invalid date format (YYYY-MM-DD required)")
+            fields["date"] = date
+        if description is not None:
+            fields["description"] = description
+        if contact_id is not None:
+            # contact must belong to the sender (user_id)
+            if not self.contacts_manager.contact_exists(contact_id, user_id):
+                return self.dict_response(False, "Contact does not exist")
+            fields["contact_id"] = contact_id
+
+        if not fields:
+            return self.dict_response(False, "No fields to update")
+
+        try:
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                # Only allow update if the user is the sender
+                set_frag = ", ".join(f"{k} = ?" for k in fields.keys())
+                params = list(fields.values()) + [transaction_id, user_id]
+                cursor.execute(f"UPDATE transactions SET {set_frag} WHERE id = ? AND from_user_id = ?", tuple(params))
+                updated = cursor.rowcount or 0
+                conn.commit()
+            if updated == 0:
+                logger.warning(f"Update transaction noop or not authorized: id={transaction_id}, user={user_id}.")
+            else:
+                logger.info(f"Updated transaction id={transaction_id} for user {user_id}.")
+            return self.dict_response(True, data={"updated": updated})
+        except Exception as e:
+            error_msg = f"Error updating transaction id={transaction_id} for user {user_id}: {str(e)}"
             logger.error(error_msg)
             return self.dict_response(False, error_msg)
 
@@ -159,27 +217,18 @@ class TransactionsManager:
     def delete_transaction(self, transaction_id, user_id):
         """
         Deletes a transaction by id if the user is the sender.
-        Returns an authorization error if the transaction exists but belongs to another user,
-        and a not-found error if the transaction does not exist.
+        Idempotent semantics: return success=True with deleted count, without leaking authorization.
         """
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
-                # First, check if the transaction exists and who owns it
-                cursor.execute("SELECT from_user_id FROM transactions WHERE id = ?", (transaction_id,))
-                row = cursor.fetchone()
-                if row is None:
-                    logger.warning(f"Delete failed: transaction id={transaction_id} not found for user {user_id}.")
-                    return self.dict_response(False, "Transaction not found")
-                owner_id = row["from_user_id"]
-                if owner_id != user_id:
-                    logger.warning(f"Delete not authorized: user {user_id} is not sender of transaction id={transaction_id} (owner={owner_id}).")
-                    return self.dict_response(False, "Not authorized to delete this transaction")
-                # Authorized: perform delete
                 cursor.execute("DELETE FROM transactions WHERE id = ? AND from_user_id = ?", (transaction_id, user_id))
                 deleted = cursor.rowcount or 0
                 conn.commit()
-            logger.info(f"Deleted transaction with ID {transaction_id} for user {user_id}.")
+            if deleted == 0:
+                logger.warning(f"Delete transaction noop (not found or not owned): id={transaction_id}, user={user_id}.")
+            else:
+                logger.info(f"Deleted transaction with ID {transaction_id} for user {user_id}.")
             return self.dict_response(True, data={"deleted": deleted})
         except Exception as e:
             error_msg = f"Error deleting transaction with ID {transaction_id} for user {user_id}: {str(e)}"
@@ -305,5 +354,37 @@ class TransactionsManager:
             return self.dict_response(True, data=breakdown)
         except Exception as e:
             error_msg = f"Error calculating balance breakdown for user ID {user_id}: {str(e)}"
+            logger.error(error_msg)
+            return self.dict_response(False, error_msg)
+
+    def get_contact_balance(self, user_id, contact_id):
+        """
+        Balance for a specific contact from the sender's perspective:
+        - credits_sent: sum of amounts where from_user_id=user_id AND contact_id matches AND type='credit'
+        - debits_sent: sum of amounts where from_user_id=user_id AND contact_id matches AND type='debit'
+        - net = credits_sent - debits_sent
+        """
+        try:
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute(
+                    """
+                    SELECT
+                        COALESCE(SUM(CASE WHEN type = 'credit' THEN amount ELSE 0 END), 0) AS credits_sent,
+                        COALESCE(SUM(CASE WHEN type = 'debit' THEN amount ELSE 0 END), 0) AS debits_sent
+                    FROM transactions
+                    WHERE from_user_id = ? AND contact_id = ?
+                    """,
+                    (user_id, contact_id)
+                )
+                row = cursor.fetchone()
+                credits_sent = row["credits_sent"]
+                debits_sent = row["debits_sent"]
+            net = credits_sent - debits_sent
+            data = {"credits_sent": credits_sent, "debits_sent": debits_sent, "net": net}
+            logger.info(f"(CONTACT BALANCE) user={user_id}, contact={contact_id}: {data}")
+            return self.dict_response(True, data=data)
+        except Exception as e:
+            error_msg = f"Error calculating contact balance for user {user_id} and contact {contact_id}: {str(e)}"
             logger.error(error_msg)
             return self.dict_response(False, error_msg)
