@@ -211,7 +211,7 @@ def test_api_add_expense_with_category_id():
     assert "category_id" in matches[0]
     assert matches[0]["category_id"] == cat_id
 
-# --- New tests for NET balance and health ---
+# --- New tests for NET balance, health, and admin flag behavior ---
 
 def test_api_net_balance_and_breakdown():
     """
@@ -278,6 +278,24 @@ def test_api_get_transactions_received():
     assert all(t["to_user_id"] == u1 for t in received["data"])
     # Ensure the sent transaction is not present
     assert all(t["description"] != "U1->U2" for t in received["data"])
+
+def test_api_non_admin_cannot_use_is_admin_flag():
+    """
+    A normal user passing is_admin=True must be rejected explicitly with an error.
+    This prevents privilege escalation via flags.
+    """
+    u1 = _ensure_user("flag_user1", "pw")
+    u2 = _ensure_user("flag_user2", "pw")
+
+    # Create transactions in both directions
+    api_add_transaction(u1, u2, "credit", 15, "2025-08-19", "u1->u2")
+    api_add_transaction(u2, u1, "debit", 7, "2025-08-19", "u2->u1")
+
+    # Try to use is_admin=True as a normal user
+    res = api_get_transactions(u1, is_admin=True)
+    assert isinstance(res, dict)
+    assert not res["success"]
+    assert "admin" in (res["error"] or "").lower()
 
 def test_api_health_returns_schema_version():
     """
