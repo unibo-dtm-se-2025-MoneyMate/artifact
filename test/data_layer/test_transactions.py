@@ -74,6 +74,18 @@ def test_delete_transaction(db):
     assert res["success"]
     assert db.transactions.get_transactions(db._from_user_id)["data"] == []
 
+def test_receiver_cannot_delete_transaction(db):
+    """
+    Authorization: the receiver should NOT be allowed to delete a transaction
+    where they are not the sender.
+    """
+    db.transactions.add_transaction(db._from_user_id, db._to_user_id, "credit", 25, "2025-08-19", "Gift")
+    tid = db.transactions.get_transactions(db._from_user_id)["data"][0]["id"]
+    res = db.transactions.delete_transaction(tid, db._to_user_id)
+    assert isinstance(res, dict)
+    assert not res["success"]
+    assert ("not authorized" in (res["error"] or "").lower()) or ("permission" in (res["error"] or "").lower())
+
 def test_get_user_balance(db):
     """Test calculation of user balance (credit - debit)."""
     db.transactions.add_transaction(db._from_user_id, db._to_user_id, "credit", 100, "2025-08-19", "Refund")
@@ -110,6 +122,17 @@ def test_admin_flag_does_not_leak_for_normal_user(db):
     user_tr = db.transactions.get_transactions(db._from_user_id, is_admin=False)
     assert user_tr["success"]
     assert all(tr["from_user_id"] == db._from_user_id for tr in user_tr["data"])
+
+def test_non_admin_cannot_use_is_admin_flag(db):
+    """
+    Even if a normal user passes is_admin=True explicitly, the call must be rejected
+    with an 'Admin privileges required' error (no privilege escalation via flag).
+    """
+    db.transactions.add_transaction(db._from_user_id, db._to_user_id, "debit", 5, "2025-08-19", "flag-check")
+    res = db.transactions.get_transactions(db._from_user_id, is_admin=True)
+    assert isinstance(res, dict)
+    assert not res["success"]
+    assert "admin" in (res["error"] or "").lower()
 
 def test_net_balance_and_breakdown_manager(db):
     """
