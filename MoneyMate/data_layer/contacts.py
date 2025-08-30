@@ -5,6 +5,15 @@ import MoneyMate.data_layer.logging_config  # Assicura la configurazione globale
 
 logger = logging.getLogger(__name__)
 
+def _order_clause(order: str) -> str:
+    mapping = {
+        "name_asc": "ORDER BY name ASC, id ASC",
+        "name_desc": "ORDER BY name DESC, id DESC",
+        "created_asc": "ORDER BY created_at ASC, id ASC",
+        "created_desc": "ORDER BY created_at DESC, id DESC",
+    }
+    return mapping.get((order or "name_asc"), mapping["name_asc"])
+
 class ContactsManager:
     """
     Manager class for handling contact-related database operations.
@@ -33,23 +42,25 @@ class ContactsManager:
             logger.info(f"Contact '{name}' added successfully for user {user_id}.")
             return self.dict_response(True)
         except Exception as e:
-            logger.error(f"Error adding contact '{name}' for user {user_id}: {e}")
-            return self.dict_response(False, str(e))
+            msg = str(e)
+            logger.error(f"Error adding contact '{name}' for user {user_id}: {msg}")
+            if "UNIQUE constraint failed" in msg:
+                return self.dict_response(False, "Contact already exists for this user")
+            return self.dict_response(False, msg)
 
-    def get_contacts(self, user_id):
+    def get_contacts(self, user_id, order="name_asc"):
         """
         Returns all contacts for a user as a list of dicts.
+        Supports optional ordering.
         """
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute(
-                    "SELECT id, name FROM contacts WHERE user_id = ? ORDER BY name ASC",
-                    (user_id,),
-                )
+                sql = f"SELECT id, name FROM contacts WHERE user_id = ? {_order_clause(order)}"
+                cursor.execute(sql, (user_id,))
                 rows = cursor.fetchall()
             contacts = [{"id": r["id"], "name": r["name"]} for r in rows]
-            logger.info(f"Retrieved {len(contacts)} contacts for user {user_id}.")
+            logger.info(f"Retrieved {len(contacts)} contacts for user {user_id} (order={order}).")
             return self.dict_response(True, data=contacts)
         except Exception as e:
             logger.error(f"Error retrieving contacts for user {user_id}: {e}")
@@ -58,6 +69,7 @@ class ContactsManager:
     def delete_contact(self, contact_id, user_id):
         """
         Deletes a specific contact by ID, only if it belongs to the user.
+        Always returns success=True with deleted count (idempotent semantics).
         """
         try:
             with get_connection(self.db_path) as conn:
@@ -66,9 +78,9 @@ class ContactsManager:
                 deleted = cursor.rowcount or 0
                 conn.commit()
             if deleted == 0:
-                logger.warning(f"Error deleting contact with ID {contact_id} for user {user_id}: not found or not owned by user.")
-                return self.dict_response(False, "Contact not found or not owned by user")
-            logger.info(f"Deleted contact with ID {contact_id} for user {user_id}.")
+                logger.warning(f"Delete contact noop: id={contact_id}, user={user_id} (not found or not owned).")
+            else:
+                logger.info(f"Deleted contact with ID {contact_id} for user {user_id}.")
             return self.dict_response(True, data={"deleted": deleted})
         except Exception as e:
             logger.error(f"Error deleting contact with ID {contact_id} for user {user_id}: {e}")
