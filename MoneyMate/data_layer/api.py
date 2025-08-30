@@ -14,6 +14,7 @@ Extended:
 - Admin registration policy: enforced in UserManager (password '12345')
 - API now forwards 'role' to user registration and 'is_admin' to transactions listing
 - Optional category_id for expenses (backward compatible)
+- Deterministic ordering and optional pagination/filtering for listings
 """
 
 from MoneyMate.data_layer.manager import DatabaseManager
@@ -65,7 +66,7 @@ def api_list_tables():
 def api_health():
     """
     Lightweight health check for GUI integration.
-    Returns: dict {success, error, data: {schema_version}}
+    Returns: dict {success, error, data: int (schema_version)}
     """
     logger.info("API call: api_health")
     from MoneyMate.data_layer.database import get_schema_version
@@ -129,13 +130,15 @@ def api_add_category(user_id, name, description=None, color=None, icon=None):
     logger.info(f"API call: api_add_category (user_id={user_id}, name={name})")
     return get_db().categories.add_category(user_id, name, description, color, icon)
 
-def api_get_categories(user_id):
+def api_get_categories(user_id, order="name_asc", limit=None, offset=None):
     """
     List categories for the specified user.
+    Optional ordering and pagination.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_get_categories (user_id={user_id})")
-    return get_db().categories.get_categories(user_id)
+    logger.info(f"API call: api_get_categories (user_id={user_id}, order={order}, limit={limit}, offset={offset})")
+    # Categories are returned ordered by name ASC in the manager; forward pagination hints
+    return get_db().categories.get_categories(user_id, limit=limit, offset=offset)
 
 def api_delete_category(category_id, user_id):
     """
@@ -159,21 +162,23 @@ def api_add_expense(title, price, date, category, user_id, category_id=None):
     )
     return get_db().expenses.add_expense(title, price, date, category, user_id, category_id=category_id)
 
-def api_get_expenses(user_id):
+def api_get_expenses(user_id, order="date_desc", limit=None, offset=None, date_from=None, date_to=None):
     """
     List all expenses for the specified user.
+    Optional ordering, pagination, and date range filtering.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_get_expenses (user_id={user_id})")
-    return get_db().expenses.get_expenses(user_id)
+    logger.info(f"API call: api_get_expenses (user_id={user_id}, order={order}, limit={limit}, offset={offset}, date_from={date_from}, date_to={date_to})")
+    return get_db().expenses.get_expenses(user_id, order=order, limit=limit, offset=offset, date_from=date_from, date_to=date_to)
 
-def api_search_expenses(query, user_id):
+def api_search_expenses(query, user_id, order="date_desc", limit=None, offset=None, date_from=None, date_to=None):
     """
     Search expenses by title or category for the specified user.
+    Case-insensitive search. Optional ordering, pagination, and date range.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_search_expenses (query={query}, user_id={user_id})")
-    return get_db().expenses.search_expenses(query, user_id)
+    logger.info(f"API call: api_search_expenses (query={query}, user_id={user_id}, order={order}, limit={limit}, offset={offset}, date_from={date_from}, date_to={date_to})")
+    return get_db().expenses.search_expenses(query, user_id, order=order, limit=limit, offset=offset, date_from=date_from, date_to=date_to)
 
 def api_delete_expense(expense_id, user_id):
     """
@@ -201,12 +206,13 @@ def api_add_contact(name, user_id):
     logger.info(f"API call: api_add_contact (name={name}, user_id={user_id})")
     return get_db().contacts.add_contact(name, user_id)
 
-def api_get_contacts(user_id):
+def api_get_contacts(user_id, order="name_asc"):
     """
     List all contacts for the specified user.
+    Optional ordering.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_get_contacts (user_id={user_id})")
+    logger.info(f"API call: api_get_contacts (user_id={user_id}, order={order})")
     return get_db().contacts.get_contacts(user_id)
 
 def api_delete_contact(contact_id, user_id):
@@ -230,17 +236,18 @@ def api_add_transaction(from_user_id, to_user_id, type_, amount, date, descripti
     )
     return get_db().transactions.add_transaction(from_user_id, to_user_id, type_, amount, date, description, contact_id)
 
-def api_get_transactions(user_id, as_sender=True, is_admin=False):
+def api_get_transactions(user_id, as_sender=True, is_admin=False, order="date_desc", limit=None, offset=None, date_from=None, date_to=None, contact_id=None):
     """
     List transactions for the user.
     If is_admin is True, returns all transactions in the system (validated by data layer).
     Otherwise:
       - If as_sender is True, returns transactions sent by the user.
       - If False, returns transactions received by the user.
+    Optional ordering, pagination, date range, and contact filter.
     Returns: dict {success, error, data}
     """
-    logger.info(f"API call: api_get_transactions (user_id={user_id}, as_sender={as_sender}, is_admin={is_admin})")
-    return get_db().transactions.get_transactions(user_id, as_sender, is_admin)
+    logger.info(f"API call: api_get_transactions (user_id={user_id}, as_sender={as_sender}, is_admin={is_admin}, order={order}, limit={limit}, offset={offset}, date_from={date_from}, date_to={date_to}, contact_id={contact_id})")
+    return get_db().transactions.get_transactions(user_id, as_sender=as_sender, is_admin=is_admin, order=order, limit=limit, offset=offset, date_from=date_from, date_to=date_to, contact_id=contact_id)
 
 def api_delete_transaction(transaction_id, user_id):
     """
