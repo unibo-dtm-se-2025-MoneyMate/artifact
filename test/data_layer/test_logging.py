@@ -1,3 +1,17 @@
+"""
+Logging tests (Manager and API).
+
+This module covers:
+- Manager-level logging:
+  - expenses: add success, validation failure, delete (success or error), clear
+  - contacts: add success, validation failure, delete (success or error)
+  - transactions: add success, validation failure, delete (deleted / not authorized / not found), balance calculation
+- API-level logging:
+  - verifies that each high-level API emits an "API call: <fn>" log line
+- Test hygiene: shared TEST_DB with module-level setup/teardown
+"""
+
+
 import os
 import gc
 import time

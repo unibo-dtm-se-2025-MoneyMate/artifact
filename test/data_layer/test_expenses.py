@@ -1,3 +1,26 @@
+"""
+Expenses tests (Manager).
+
+This module covers:
+- table presence: core + extended tables exist
+- add a valid expense and retrieve it
+- validation errors: empty title, negative price, invalid date format
+- non-numeric price is rejected with a clear 'price' error
+- search:
+  - filter by title keyword
+  - filter by category text (legacy field)
+  - results include category_id when present in schema
+- deletion:
+  - delete a single expense by id
+  - clear all expenses for a user
+- response contract: every call returns {success, error, data}
+- categories linkage:
+  - add with valid category_id (own category) succeeds
+  - add with category_id from another user fails
+- Test hygiene: per-test fixture with Windows-safe cleanup
+"""
+
+
 import sys
 import os
 import gc

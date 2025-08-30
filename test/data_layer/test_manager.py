@@ -1,3 +1,15 @@
+"""
+DatabaseManager integration tests.
+
+This module covers:
+- list_tables returns at least the core tables
+- user/admin role support:
+  - register admin and verify role
+  - upgrade a normal user to admin via set_user_role
+- Test hygiene: tmp_path-backed fixture and explicit manager close
+"""
+
+
 import gc
 import pytest
 from MoneyMate.data_layer.manager import DatabaseManager

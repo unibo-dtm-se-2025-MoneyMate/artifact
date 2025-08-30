@@ -1,3 +1,23 @@
+"""
+Transactions tests (Manager).
+
+This module covers:
+- add a valid transaction and retrieve it
+- validation errors: invalid type, negative amount
+- deletion:
+  - sender can delete own transaction
+  - receiver cannot delete someone else's transaction (authorization enforced)
+- user existence validation: reject transactions with invalid sender ids
+- admin visibility: admin can view all transactions
+- non-admin isolation:
+  - is_admin=False returns only user's own sent transactions
+  - is_admin=True requested by non-admin is explicitly rejected
+- balance analytics (Manager):
+  - net balance semantics and detailed breakdown match the expected scenario
+- Test hygiene: per-test fixture with Windows-safe cleanup
+"""
+
+
 import sys
 import os
 import gc

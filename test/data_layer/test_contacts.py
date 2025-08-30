@@ -1,3 +1,14 @@
+"""
+Contacts tests (Manager).
+
+This module covers:
+- add a valid contact for a user and retrieve it
+- validation: empty or None contact name rejected with error
+- delete a contact by id and verify the list is empty
+- Test hygiene: per-test fixture with Windows-safe cleanup
+"""
+
+
 import sys
 import os
 import gc

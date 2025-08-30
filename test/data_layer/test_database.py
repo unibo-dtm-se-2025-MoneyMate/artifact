@@ -1,3 +1,16 @@
+"""
+Database initialization and schema tests.
+
+This module covers:
+- init_db creates all core tables: users, contacts, expenses, transactions
+- extended schema presence: categories, notes, attachments, access_logs
+- get_connection returns a live connection (with FK ON)
+- users table contains role column (role-based logic)
+- expenses table contains optional category_id column (for FK to categories)
+- Test hygiene: module-level setup/teardown with Windows-safe cleanup
+"""
+
+
 import os
 import gc
 import time
