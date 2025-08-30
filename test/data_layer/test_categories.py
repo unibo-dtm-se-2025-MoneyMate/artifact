@@ -172,3 +172,22 @@ def test_categories_same_name_different_users_and_unauthorized_delete(tmp_path):
     assert cat2_id in ids_u2_after
 
     db.close()
+
+
+def test_api_add_category_invalid_name(tmp_path):
+    """
+    API path: adding a category with an empty or None name must fail with a clear error.
+    """
+    db_file = tmp_path / "cats_api_invalid.db"
+    set_db_path(str(db_file))
+
+    user_res = api_register_user("cat_api_user_invalid", "pw")
+    assert user_res["success"]
+    user_id = user_res["data"]["user_id"]
+
+    for invalid in ("", None):
+        res = api_add_category(user_id, invalid)
+        assert not res["success"]
+        assert "name" in (res["error"] or "").lower()
+
+    set_db_path(None)
