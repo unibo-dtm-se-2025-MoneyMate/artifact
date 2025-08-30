@@ -28,7 +28,7 @@ class ContactsManager:
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("INSERT INTO contacts (name, user_id) VALUES (?, ?)", (name, user_id))
+                cursor.execute("INSERT INTO contacts (name, user_id) VALUES (?, ?)", (name.strip() if isinstance(name, str) else name, user_id))
                 conn.commit()
             logger.info(f"Contact '{name}' added successfully for user {user_id}.")
             return self.dict_response(True)
@@ -43,9 +43,12 @@ class ContactsManager:
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
-                cursor.execute("SELECT id, name FROM contacts WHERE user_id = ?", (user_id,))
+                cursor.execute(
+                    "SELECT id, name FROM contacts WHERE user_id = ? ORDER BY name ASC",
+                    (user_id,),
+                )
                 rows = cursor.fetchall()
-            contacts = [{"id": r[0], "name": r[1]} for r in rows]
+            contacts = [{"id": r["id"], "name": r["name"]} for r in rows]
             logger.info(f"Retrieved {len(contacts)} contacts for user {user_id}.")
             return self.dict_response(True, data=contacts)
         except Exception as e:
@@ -60,9 +63,13 @@ class ContactsManager:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
                 cursor.execute("DELETE FROM contacts WHERE id = ? AND user_id = ?", (contact_id, user_id))
+                deleted = cursor.rowcount or 0
                 conn.commit()
+            if deleted == 0:
+                logger.warning(f"Error deleting contact with ID {contact_id} for user {user_id}: not found or not owned by user.")
+                return self.dict_response(False, "Contact not found or not owned by user")
             logger.info(f"Deleted contact with ID {contact_id} for user {user_id}.")
-            return self.dict_response(True)
+            return self.dict_response(True, data={"deleted": deleted})
         except Exception as e:
             logger.error(f"Error deleting contact with ID {contact_id} for user {user_id}: {e}")
             return self.dict_response(False, str(e))
