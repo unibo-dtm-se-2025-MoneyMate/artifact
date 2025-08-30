@@ -1,69 +1,288 @@
+"""
+Database utilities for MoneyMate: initialization, connections, and schema management.
+
+This module:
+- Defines a default DB_PATH for the manager default.
+- Initializes the SQLite database with all required tables.
+- Ensures PRAGMA foreign_keys=ON for every connection.
+- Provides a helper to list existing tables.
+
+Schema extensions:
+- categories (per-user custom categories)
+- notes (notes attached to an expense OR transaction OR contact)
+- attachments (files attached to expense/transaction/contact)
+- access_logs (security/audit log)
+- Strengthened foreign key relationships among users, contacts, expenses, transactions
+  with sensible ON DELETE behaviors and indexes.
+
+Important design note (per project tests/specs):
+- expenses.category_id is optional and does NOT have a hard FK to categories.id.
+  This allows deleting categories without nullifying existing expenses; the historical
+  category_id is preserved, while application-level validation ensures only own categories
+  can be assigned on insert.
+"""
+
 import sqlite3
-import logging
-import MoneyMate.data_layer.logging_config  # Ensure global logging configuration
+from typing import Dict, Any
 
+# Default database path used by DatabaseManager when no path is provided.
 DB_PATH = "moneymate.db"
-logger = logging.getLogger(__name__)
 
-def get_connection(db_path=DB_PATH):
-    try:
+def get_connection(db_path: str):
+    """
+    Return a new SQLite connection with foreign key support enabled.
+    - Supports SQLite URI for shared in-memory DBs (e.g., file:moneymate?mode=memory&cache=shared).
+    - Sets row_factory to sqlite3.Row for safer row handling.
+    """
+    # If using an SQLite connection URI, enable uri=True for proper handling.
+    if isinstance(db_path, str) and db_path.startswith("file:"):
+        conn = sqlite3.connect(db_path, uri=True)
+    else:
         conn = sqlite3.connect(db_path)
-        logger.debug(f"Opened SQLite connection to {db_path}")
-        return conn
-    except Exception as e:
-        logger.error(f"Failed to open SQLite connection to {db_path}: {e}")
-        raise
+    conn.execute("PRAGMA foreign_keys = ON;")
+    try:
+        conn.row_factory = sqlite3.Row
+    except Exception:
+        pass
+    return conn
 
-def init_db(db_path=DB_PATH):
+def init_db(db_path: str) -> Dict[str, Any]:
     """
-    Creates the tables if they do not exist in the SQLite database.
+    Initialize the database with necessary tables if they don't exist.
+    Creates base tables and extended tables with proper indexes.
+    Also performs light, backward-compatible migrations when needed.
     """
     try:
-        with get_connection(db_path) as conn:
-            cursor = conn.cursor()
-            logger.info(f"Initializing database and creating tables if they do not exist (db_path={db_path})")
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS expenses (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    title TEXT NOT NULL,
-                    price REAL NOT NULL,
-                    date TEXT NOT NULL,
-                    category TEXT NOT NULL
-                )""")
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS contacts (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    name TEXT NOT NULL
-                )""")
-            cursor.execute("""
-                CREATE TABLE IF NOT EXISTS transactions (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    contact_id INTEGER NOT NULL,
-                    type TEXT CHECK(type IN ('debit', 'credit')) NOT NULL,
-                    amount REAL NOT NULL,
-                    date TEXT NOT NULL,
-                    description TEXT,
-                    FOREIGN KEY(contact_id) REFERENCES contacts(id)
-                )""")
-            conn.commit()
-            logger.info("Database tables created and initialization committed.")
-    except Exception as e:
-        logger.error(f"Error initializing database at {db_path}: {e}")
-        raise
+        conn = get_connection(db_path)
+        cur = conn.cursor()
 
-# --- Method to list all tables in the DB, especially useful for testing ---
-def list_tables(db_path=DB_PATH):
+        # Performance/UX pragmas for desktop usage (best-effort)
+        try:
+            cur.execute("PRAGMA journal_mode=WAL;")
+            cur.execute("PRAGMA synchronous=NORMAL;")
+        except Exception:
+            pass
+
+        # Schema versioning (basic)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS schema_version (
+                version INTEGER NOT NULL
+            );
+        """)
+        cur.execute("SELECT COUNT(*) AS cnt FROM schema_version;")
+        count = cur.fetchone()["cnt"]
+        if count == 0:
+            # Start at version 1 for initial baseline of this codebase.
+            cur.execute("INSERT INTO schema_version (version) VALUES (1);")
+
+        # Core tables (order matters for FKs)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT NOT NULL UNIQUE,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'user' CHECK (role IN ('user','admin')),
+                created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            );
+        """)
+
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS contacts (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE (user_id, name),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_contacts_user_id ON contacts(user_id);")
+
+        # Expenses (legacy textual category + optional category_id without hard FK)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS expenses (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                title TEXT NOT NULL,
+                price REAL NOT NULL CHECK (price >= 0),
+                date TEXT NOT NULL,
+                category TEXT, -- legacy textual category
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                category_id INTEGER,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_user_id ON expenses(user_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_date ON expenses(date);")
+        # Composite index useful for GUI filtering by user/date
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date);")
+        # Ensure index on expenses.category_id (even if column existed before)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_category_id ON expenses(category_id);")
+
+        # Transactions between users
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS transactions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                from_user_id INTEGER NOT NULL,
+                to_user_id INTEGER NOT NULL,
+                type TEXT NOT NULL CHECK (type IN ('credit','debit')),
+                amount REAL NOT NULL CHECK (amount >= 0),
+                date TEXT NOT NULL,
+                description TEXT,
+                contact_id INTEGER, -- optional link to a contact
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (from_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (to_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE SET NULL
+            );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_from_user ON transactions(from_user_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_to_user ON transactions(to_user_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_date ON transactions(date);")
+        # Composite indexes for common filtered/ordered views in GUI
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_from_user_date ON transactions(from_user_id, date);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_to_user_date ON transactions(to_user_id, date);")
+
+        # Per-user custom categories
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS categories (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                name TEXT NOT NULL,
+                description TEXT,
+                color TEXT,
+                icon TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE (user_id, name),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_categories_user_id ON categories(user_id);")
+
+        # Notes: can belong to exactly one of expense/transaction/contact (at least one not NULL)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS notes (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                expense_id INTEGER,
+                transaction_id INTEGER,
+                contact_id INTEGER,
+                content TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (expense_id) REFERENCES expenses(id) ON DELETE CASCADE,
+                FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
+                CHECK (expense_id IS NOT NULL OR transaction_id IS NOT NULL OR contact_id IS NOT NULL)
+            );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_notes_user_id ON notes(user_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_notes_expense_id ON notes(expense_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_notes_transaction_id ON notes(transaction_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_notes_contact_id ON notes(contact_id);")
+
+        # Attachments: file pointers attached to expense/transaction/contact (at least one)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS attachments (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                expense_id INTEGER,
+                transaction_id INTEGER,
+                contact_id INTEGER,
+                file_path TEXT NOT NULL,
+                mime_type TEXT,
+                size_bytes INTEGER,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (expense_id) REFERENCES expenses(id) ON DELETE CASCADE,
+                FOREIGN KEY (transaction_id) REFERENCES transactions(id) ON DELETE CASCADE,
+                FOREIGN KEY (contact_id) REFERENCES contacts(id) ON DELETE CASCADE,
+                CHECK (expense_id IS NOT NULL OR transaction_id IS NOT NULL OR contact_id IS NOT NULL)
+            );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_attachments_user_id ON attachments(user_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_attachments_expense_id ON attachments(expense_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_attachments_transaction_id ON attachments(transaction_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_attachments_contact_id ON attachments(contact_id);")
+
+        # Access/Security logs (MUST exist for auditing tests)
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS access_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                action TEXT NOT NULL CHECK (action IN (
+                    'login','logout','failed_login','password_change','password_reset'
+                )),
+                ip_address TEXT,
+                user_agent TEXT,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE SET NULL
+            );
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_user_id ON access_logs(user_id);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_action ON access_logs(action);")
+        cur.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_created_at ON access_logs(created_at);")
+
+        # Backward-compatible migration: if expenses.category_id column is missing (older DB), add it
+        cur.execute("PRAGMA table_info(expenses);")
+        expense_cols_after = {row["name"] for row in cur.fetchall()}
+        if "category_id" not in expense_cols_after:
+            try:
+                cur.execute("ALTER TABLE expenses ADD COLUMN category_id INTEGER;")
+                cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_category_id ON expenses(category_id);")
+            except Exception:
+                # Ignore alter errors; app remains functional without the column
+                pass
+
+        conn.commit()
+        return {"success": True, "error": None, "data": "initialized"}
+    except Exception as e:
+        return {"success": False, "error": str(e), "data": None}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+def list_tables(db_path: str) -> Dict[str, Any]:
     """
-    Returns a list of all tables in the database.
+    Return a list of user-defined tables in the database.
     """
     try:
-        with get_connection(db_path) as conn:
-            cursor = conn.cursor()
-            logger.debug(f"Listing all tables in the database (db_path={db_path})")
-            cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-            tables = [row[0] for row in cursor.fetchall()]
-        logger.info(f"Found tables: {tables}")
+        conn = get_connection(db_path)
+        cur = conn.cursor()
+        cur.execute("""
+            SELECT name
+            FROM sqlite_schema
+            WHERE type='table' AND name NOT LIKE 'sqlite_%'
+            ORDER BY name;
+        """)
+        rows = cur.fetchall()
+        tables = [r["name"] for r in rows]
         return {"success": True, "error": None, "data": tables}
     except Exception as e:
-        logger.error(f"Error listing tables in database {db_path}: {e}")
+        return {"success": False, "error": str(e), "data": []}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+def get_schema_version(db_path: str) -> Dict[str, Any]:
+    """
+    Return the current schema version (integer) if available.
+    """
+    try:
+        conn = get_connection(db_path)
+        cur = conn.cursor()
+        cur.execute("SELECT version FROM schema_version LIMIT 1;")
+        row = cur.fetchone()
+        version = row["version"] if row else None
+        return {"success": True, "error": None, "data": version}
+    except Exception as e:
         return {"success": False, "error": str(e), "data": None}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass

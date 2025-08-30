@@ -1,13 +1,42 @@
+"""
+API tests for MoneyMate data layer.
+
+This test module verifies:
+- Expenses API: add and list expenses for a user
+- Contacts API: add and list contacts for a user
+- Transactions API:
+  - add transactions and compute legacy balance (credit - debit across both sides)
+  - list transactions sent vs received
+  - admin visibility of all transactions
+  - rejection when non-admin sets is_admin=True
+- Users API:
+  - register/login
+  - admin registration policy (admin password must be '12345')
+- Expenses with categories:
+  - add expense with valid category_id
+- Balance analytics:
+  - NET balance and detailed breakdown semantics
+- API contract:
+  - all endpoints return dicts with success/error/data
+- Health:
+  - api_health returns current schema version
+- Test hygiene:
+  - Windows-safe setup/teardown of a dedicated test database
+"""
+
 import os
 import gc
+import time
 import pytest
 from MoneyMate.data_layer.api import (
     api_list_tables, api_add_expense, api_get_expenses,
     api_add_contact, api_get_contacts, api_add_transaction,
-    api_get_transactions, api_get_contact_balance,
-    set_db_path
+    api_get_transactions, api_get_user_balance,
+    set_db_path, api_register_user, api_login_user,
+    api_get_user_net_balance, api_get_user_balance_breakdown, api_health,
 )
 from MoneyMate.data_layer.manager import DatabaseManager
+from MoneyMate.data_layer.database import get_connection
 
 TEST_DB = "test_api.db"
 
@@ -18,69 +47,120 @@ def setup_module(module):
     """
     if os.path.exists(TEST_DB):
         os.remove(TEST_DB)
-    DatabaseManager(TEST_DB)  # Initialize DB schema
-    set_db_path(TEST_DB)      # Set the database used by the API
+    DatabaseManager(TEST_DB)
+    set_db_path(TEST_DB)
 
 def teardown_module(module):
     """
     Remove the test database after all tests have run.
     Releases API global DB reference and ensures proper file cleanup.
+    Adds a retry loop to avoid Windows file locks.
     """
     set_db_path(None)
     gc.collect()
+    for _ in range(10):
+        try:
+            if os.path.exists(TEST_DB):
+                os.remove(TEST_DB)
+            break
+        except PermissionError:
+            time.sleep(0.2)
     if os.path.exists(TEST_DB):
-        os.remove(TEST_DB)
+        raise PermissionError(f"Unable to delete test database file: {TEST_DB}")
+
+def _get_test_user():
+    # Ensure a test user exists and return user_id
+    res = api_register_user("apitestuser", "pw")
+    if not res["success"] and "already exists" in str(res["error"]).lower():
+        res = api_login_user("apitestuser", "pw")
+    assert res["success"]
+    return res["data"]["user_id"]
+
+# --- Helpers added to cover new admin/role features without touching existing tests ---
+
+def _ensure_user(username, password, role="user"):
+    """
+    Ensure a user (optionally with role) exists; if already present, login.
+    Returns user_id.
+    """
+    res = api_register_user(username, password, role=role)
+    if not res["success"] and "already exists" in str(res["error"]).lower():
+        res = api_login_user(username, password)
+    assert res["success"]
+    return res["data"]["user_id"]
+
+def _get_admin_user(username="adminuser"):
+    """
+    Ensure an admin user exists with the enforced password '12345'.
+    Returns admin user_id.
+    """
+    return _ensure_user(username, "12345", role="admin")
+
+# --- Existing tests (UNCHANGED) ---
 
 def test_api_add_and_get_expense():
     """
     Add a new expense using the API and verify it can be retrieved.
-    Checks that the expense API correctly adds and lists expenses.
+    Checks that the expense API correctly adds and lists expenses for the user.
     """
-    res = api_add_expense("Test", 5, "2025-08-19", "Food")
+    user_id = _get_test_user()
+    res = api_add_expense("Test", 5, "2025-08-19", "Food", user_id)
     assert isinstance(res, dict)
     assert res["success"]
-    res_get = api_get_expenses()
+    res_get = api_get_expenses(user_id)
     assert isinstance(res_get, dict)
     assert any(e["title"] == "Test" for e in res_get["data"])
 
 def test_api_add_and_get_contact():
     """
     Add a new contact using the API and verify it can be retrieved.
-    Checks that the contact API correctly adds and lists contacts.
+    Checks that the contact API correctly adds and lists contacts for the user.
     """
-    res = api_add_contact("Mario")
+    user_id = _get_test_user()
+    res = api_add_contact("Mario", user_id)
     assert isinstance(res, dict)
     assert res["success"]
-    res_get = api_get_contacts()
+    res_get = api_get_contacts(user_id)
     assert isinstance(res_get, dict)
     assert any(c["name"] == "Mario" for c in res_get["data"])
 
 def test_api_add_transaction_and_balance():
     """
-    Add a contact, assign two transactions (credit and debit), and verify the balance.
+    Add two users, create a transaction from one to the other, and verify the balances.
     Tests the transaction API and balance calculation logic.
     """
-    contact = api_add_contact("Giulia")
-    cid = api_get_contacts()["data"][0]["id"]
-    api_add_transaction(cid, "credit", 50, "2025-08-19", "Loan")
-    api_add_transaction(cid, "debit", 20, "2025-08-19", "Repayment")
-    saldo = api_get_contact_balance(cid)
-    assert isinstance(saldo, dict)
-    assert saldo["success"]
-    assert saldo["data"] == 30
+    from_id = _get_test_user()
+    res2 = api_register_user("apitestuser2", "pw")
+    if not res2["success"]:
+        res2 = api_login_user("apitestuser2", "pw")
+    to_id = res2["data"]["user_id"]
+
+    # Add transaction from from_id to to_id
+    api_add_transaction(from_id, to_id, "credit", 50, "2025-08-19", "Loan")
+    api_add_transaction(from_id, to_id, "debit", 20, "2025-08-19", "Repayment")
+    saldo_sender = api_get_user_balance(from_id)
+    saldo_receiver = api_get_user_balance(to_id)
+    assert isinstance(saldo_sender, dict) and saldo_sender["success"]
+    assert isinstance(saldo_receiver, dict) and saldo_receiver["success"]
+    # Both users now have +50 credit and +20 debit in their global balance logic!
+    # The function sums by user_id in either sender or receiver
+    # So both will have (credit=50, debit=20) => saldo=30
+    assert saldo_sender["data"] == 30
+    assert saldo_receiver["data"] == 30
 
 def test_api_response_format():
     """
     Test that all main API functions return a dictionary with 'success', 'error', and 'data' keys.
     Ensures API contract is always respected.
     """
+    user_id = _get_test_user()
     funcs = [
-        lambda: api_add_expense("Contract", 1, "2025-08-19", "Food"),
-        api_get_expenses,
-        lambda: api_add_contact("TestFormat"),
-        api_get_contacts,
-        lambda: api_add_transaction(1, "credit", 5, "2025-08-19", "Salary"),
-        lambda: api_get_contact_balance(1),
+        lambda: api_add_expense("Contract", 1, "2025-08-19", "Food", user_id),
+        lambda: api_get_expenses(user_id),
+        lambda: api_add_contact("TestFormat", user_id),
+        lambda: api_get_contacts(user_id),
+        lambda: api_add_transaction(user_id, user_id, "credit", 5, "2025-08-19", "Salary"),
+        lambda: api_get_user_balance(user_id),
         api_list_tables,
     ]
     for func in funcs:
@@ -92,7 +172,162 @@ def test_api_add_expense_invalid():
     """
     Test that adding an expense with missing title fails and returns an appropriate error.
     """
-    res = api_add_expense("", 5, "2025-08-19", "Food")
+    user_id = _get_test_user()
+    res = api_add_expense("", 5, "2025-08-19", "Food", user_id)
     assert isinstance(res, dict)
     assert not res["success"]
     assert "title" in str(res["error"]).lower()
+
+# --- New tests added for admin/role features (do not replace existing ones) ---
+
+def test_api_admin_registration_and_transactions():
+    """
+    Admin registration (password must be '12345') and ability to view all transactions of all users.
+    """
+    admin_id = _get_admin_user("admin_api")
+    # Create two distinct normal users for admin visibility test
+    u1 = _ensure_user("apiu1", "pw", role="user")
+    u2 = _ensure_user("apiu2", "pw", role="user")
+
+    # Add transactions in both directions
+    api_add_transaction(u1, u2, "credit", 50, "2025-08-19", "Loan")
+    api_add_transaction(u2, u1, "debit", 20, "2025-08-19", "Repayment")
+
+    # Admin gets all transactions
+    tr_all = api_get_transactions(admin_id, is_admin=True)
+    assert isinstance(tr_all, dict) and tr_all["success"]
+    assert len(tr_all["data"]) >= 2
+    senders = {t["from_user_id"] for t in tr_all["data"]}
+    assert u1 in senders and u2 in senders
+
+    # Normal user gets only own sent transactions by default (as_sender=True)
+    tr_user = api_get_transactions(u1)
+    assert tr_user["success"]
+    assert all(t["from_user_id"] == u1 for t in tr_user["data"])
+
+def test_api_admin_wrong_password():
+    """
+    Test that admin registration fails with wrong password (must be exactly '12345').
+    """
+    res = api_register_user("wrongadmin_api", "pw", role="admin")
+    assert isinstance(res, dict)
+    assert not res["success"]
+    assert "admin password" in str(res["error"]).lower()
+
+def test_api_add_expense_with_category_id():
+    """
+    Add an expense via API with category_id linked to a user-owned category.
+    Expects success and category_id present when retrieving expenses.
+    """
+    user_id = _get_test_user()
+    # Create category for this user
+    with get_connection(TEST_DB) as conn:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO categories (user_id, name) VALUES (?, ?)", (user_id, "APICat"))
+        cat_id = cur.lastrowid
+        conn.commit()
+
+    res = api_add_expense("APICatExpense", 8.0, "2025-08-19", "Food", user_id, category_id=cat_id)
+    assert res["success"]
+
+    res_get = api_get_expenses(user_id)
+    assert res_get["success"]
+    matches = [e for e in res_get["data"] if e["title"] == "APICatExpense"]
+    assert matches, "Expected the API-inserted expense to be present"
+    assert "category_id" in matches[0]
+    assert matches[0]["category_id"] == cat_id
+
+# --- New tests for NET balance, health, and admin flag behavior ---
+
+def test_api_net_balance_and_breakdown():
+    """
+    Verify NET balance semantics and detailed breakdown:
+    - net = credits_received - debits_sent
+    - legacy remains (credits_received + credits_sent) - (debits_sent + debits_received)
+    Scenario:
+      u1 -> u2: credit 50
+      u1 -> u2: debit 20
+    Expected:
+      u1: net = 0 - 20 = -20, legacy = (0+50)-(20+0)=30
+      u2: net = 50 - 0 = 50, legacy = (50+0)-(0+20)=30
+    """
+    u1 = _ensure_user("net_user1", "pw")
+    u2 = _ensure_user("net_user2", "pw")
+
+    # Create transactions
+    api_add_transaction(u1, u2, "credit", 50, "2025-08-19", "Loan")
+    api_add_transaction(u1, u2, "debit", 20, "2025-08-19", "Repayment")
+
+    # NET balances
+    net_u1 = api_get_user_net_balance(u1)
+    net_u2 = api_get_user_net_balance(u2)
+    assert net_u1["success"] and net_u2["success"]
+    assert net_u1["data"] == -20
+    assert net_u2["data"] == 50
+
+    # Breakdown checks
+    br_u1 = api_get_user_balance_breakdown(u1)
+    br_u2 = api_get_user_balance_breakdown(u2)
+    assert br_u1["success"] and br_u2["success"]
+
+    b1 = br_u1["data"]
+    b2 = br_u2["data"]
+
+    assert b1["credits_received"] == 0
+    assert b1["debits_sent"] == 20
+    assert b1["credits_sent"] == 50
+    assert b1["debits_received"] == 0
+    assert b1["net"] == -20
+    assert b1["legacy"] == 30
+
+    assert b2["credits_received"] == 50
+    assert b2["debits_sent"] == 0
+    assert b2["credits_sent"] == 0
+    assert b2["debits_received"] == 20
+    assert b2["net"] == 50
+    assert b2["legacy"] == 30
+
+def test_api_get_transactions_received():
+    """
+    Verify that api_get_transactions(as_sender=False) returns only transactions received by the user.
+    """
+    u1 = _ensure_user("trx_recv_u1", "pw")
+    u2 = _ensure_user("trx_recv_u2", "pw")
+
+    # Two directions
+    api_add_transaction(u1, u2, "credit", 10, "2025-08-19", "U1->U2")
+    api_add_transaction(u2, u1, "debit", 5, "2025-08-19", "U2->U1")
+
+    received = api_get_transactions(u1, as_sender=False)
+    assert received["success"]
+    assert len(received["data"]) >= 1
+    assert all(t["to_user_id"] == u1 for t in received["data"])
+    # Ensure the sent transaction is not present
+    assert all(t["description"] != "U1->U2" for t in received["data"])
+
+def test_api_non_admin_cannot_use_is_admin_flag():
+    """
+    A normal user passing is_admin=True must be rejected explicitly with an error.
+    This prevents privilege escalation via flags.
+    """
+    u1 = _ensure_user("flag_user1", "pw")
+    u2 = _ensure_user("flag_user2", "pw")
+
+    # Create transactions in both directions
+    api_add_transaction(u1, u2, "credit", 15, "2025-08-19", "u1->u2")
+    api_add_transaction(u2, u1, "debit", 7, "2025-08-19", "u2->u1")
+
+    # Try to use is_admin=True as a normal user
+    res = api_get_transactions(u1, is_admin=True)
+    assert isinstance(res, dict)
+    assert not res["success"]
+    assert "admin" in (res["error"] or "").lower()
+
+def test_api_health_returns_schema_version():
+    """
+    Verify that api_health returns the current schema_version as an integer.
+    """
+    res = api_health()
+    assert isinstance(res, dict)
+    assert res["success"]
+    assert isinstance(res["data"], int)

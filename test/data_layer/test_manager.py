@@ -1,45 +1,53 @@
-import os
+"""
+DatabaseManager integration tests.
+
+This module covers:
+- list_tables returns at least the core tables
+- user/admin role support:
+  - register admin and verify role
+  - upgrade a normal user to admin via set_user_role
+- Test hygiene: tmp_path-backed fixture and explicit manager close
+"""
+
+
 import gc
 import pytest
 from MoneyMate.data_layer.manager import DatabaseManager
 
-TEST_DB = "test_manager.db"
-
-def setup_module(module):
-    """
-    Set up a clean test database before running tests.
-    This ensures no previous test artifacts affect test results.
-    """
-    if os.path.exists(TEST_DB):
-        os.remove(TEST_DB)
-    # Initialize DB schema to ensure all tables exist before tests run
-    DatabaseManager(TEST_DB)
-
-def teardown_module(module):
-    """
-    Remove the test database after all tests have run.
-    Ensures proper cleanup and releases all file handles.
-    """
-    gc.collect()  # Force garbage collection to close any lingering SQLite handles
-    if os.path.exists(TEST_DB):
-        os.remove(TEST_DB)
-
 @pytest.fixture
-def dbm():
+def dbm(tmp_path):
     """
-    Yields a fresh DatabaseManager instance for each test.
-    Ensures isolation and proper resource management.
+    Provide a fresh DatabaseManager instance backed by a per-test temporary DB file.
+    Using tmp_path avoids Windows file locks and manual cleanup.
     """
-    dbm = DatabaseManager(TEST_DB)
-    yield dbm
-    if hasattr(dbm, "close"):
-        dbm.close()
+    db_path = tmp_path / "test_manager.db"
+    db = DatabaseManager(str(db_path))
+    yield db
+    if hasattr(db, "close"):
+        db.close()
     gc.collect()
 
 def test_database_manager_list_tables(dbm):
-    """
-    Test that the DatabaseManager can list all tables in the database.
-    Verifies that the three main tables exist.
-    """
+    """Test that the DatabaseManager can list all tables in the database."""
     tables = dbm.list_tables()["data"]
-    assert set(tables) >= {"contacts", "expenses", "transactions"}
+    assert set(tables) >= {"users", "contacts", "expenses", "transactions"}
+
+def test_manager_admin_role_support(dbm):
+    """Test that manager supports admin role logic."""
+    res = dbm.users.register_user("admin", "12345", role="admin")
+    assert res["success"]
+    admin_id = res["data"]["user_id"]
+    role = dbm.users.get_user_role(admin_id)
+    assert role["success"]
+    assert role["data"]["role"] == "admin"
+
+def test_manager_can_upgrade_user_role(dbm):
+    """Test upgrading a normal user to admin via manager."""
+    admin_res = dbm.users.register_user("adminx", "12345", role="admin")
+    user_res = dbm.users.register_user("usertest", "pw")
+    assert user_res["success"]
+    admin_id = admin_res["data"]["user_id"]
+    user_id = user_res["data"]["user_id"]
+    upgrade_res = dbm.users.set_user_role(admin_id, user_id, "admin")
+    assert upgrade_res["success"]
+    assert dbm.users.get_user_role(user_id)["data"]["role"] == "admin"

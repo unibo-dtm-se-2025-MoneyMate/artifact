@@ -1,12 +1,12 @@
 """
 DatabaseManager: Central orchestrator for entity managers in MoneyMate.
 
-This class instantiates and exposes managers for expenses, contacts, and transactions,
-ensuring modularity, single responsibility and testability. All data operations should be accessed 
-through the appropriate manager instance.
+This class instantiates and exposes managers for expenses, contacts, transactions, and users,
+ensuring modularity, single responsibility, dependency injection, configurability, error handling, resource management, and testability.
+All data operations should be accessed through the appropriate manager instance.
 
 Design principles:
-- Each manager (ExpensesManager, ContactsManager, TransactionsManager) is isolated in its own file.
+- Each manager (ExpensesManager, ContactsManager, TransactionsManager, UserManager) is isolated in its own file.
 - ContactsManager is injected into TransactionsManager to handle cross-entity validation.
 - Database path is configurable for production and testing environments.
 - Utility methods such as list_tables are accessible for maintenance and health checks.
@@ -14,18 +14,22 @@ Design principles:
   supporting future scalability, and facilitating CI/CD workflows (e.g. GitHub Actions).
 
 Usage:
-    db = DatabaseManager()
-    db.expenses.add_expense(...)
-    db.contacts.get_contacts()
-    db.transactions.get_contact_balance(...)
+    with DatabaseManager() as db:
+        db.expenses.add_expense(...)
+        db.contacts.get_contacts()
+        db.transactions.get_contact_balance(...)
+        db.users.register_user(...)
 """
 
 from .database import DB_PATH, list_tables, init_db
 from .expenses import ExpensesManager
 from .contacts import ContactsManager
 from .transactions import TransactionsManager
+from .usermanager import UserManager
+from .categories import CategoriesManager
 import logging
-import MoneyMate.data_layer.logging_config  # Assicura la configurazione globale
+import sqlite3
+import MoneyMate.data_layer.logging_config  # Ensure global logging configuration
 
 logger = logging.getLogger(__name__)
 
@@ -34,6 +38,17 @@ class DatabaseManager:
     Central orchestrator for entity managers.
     Provides a unified interface for all data operations.
     """
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        try:
+            self.close()
+        except Exception:
+            pass
+        return False  # don't suppress exceptions
+
     def close(self):
         """
         Release all entity managers for test cleanup.
@@ -42,14 +57,39 @@ class DatabaseManager:
         self.expenses = None
         self.contacts = None
         self.transactions = None
-    
+        self.users = None
+        self.categories = None
+        # Close keeper connection (if any)
+        if getattr(self, "_keeper", None):
+            try:
+                self._keeper.close()
+            except Exception:
+                pass
+            finally:
+                self._keeper = None
+
     def __init__(self, db_path=DB_PATH):
         # Initialize the database and managers
         logger.info(f"Initializing DatabaseManager with db_path: {db_path}")
+        self.db_path = db_path  # store for diagnostics and future reuse
+
+        # For shared in-memory databases, keep a persistent connection alive.
+        # Expected format: file:moneymate?mode=memory&cache=shared
+        self._keeper = None
+        if isinstance(db_path, str) and db_path.startswith("file:") and "mode=memory" in db_path:
+            try:
+                self._keeper = sqlite3.connect(db_path, uri=True, check_same_thread=False)
+                self._keeper.execute("PRAGMA foreign_keys = ON;")
+                logger.info("Keeper connection established for shared in-memory database.")
+            except Exception as e:
+                logger.warning(f"Failed to create keeper connection for in-memory DB: {e}")
+
         init_db(db_path)
         self.expenses = ExpensesManager(db_path)
         self.contacts = ContactsManager(db_path)
         self.transactions = TransactionsManager(db_path, self.contacts)
+        self.users = UserManager(db_path)
+        self.categories = CategoriesManager(db_path)
 
     def _create_managers(self, db_path):
         """
@@ -61,14 +101,16 @@ class DatabaseManager:
         self.expenses = ExpensesManager(db_path)
         self.contacts = ContactsManager(db_path)
         self.transactions = TransactionsManager(db_path, self.contacts)
+        self.users = UserManager(db_path)
+        self.categories = CategoriesManager(db_path)
 
     def list_tables(self):
         """
         List all tables in the database.
         Useful for testing and diagnostics.
         """
-        logger.info(f"Listing tables for db_path: {self.expenses.db_path}")
-        return list_tables(db_path=self.expenses.db_path)
+        logger.info(f"Listing tables for db_path: {self.db_path}")
+        return list_tables(db_path=self.db_path)
     
 
     def set_db_path(self, db_path):
@@ -76,6 +118,26 @@ class DatabaseManager:
         Set a new database path and re-initialize all managers to use it.
         """
         logger.info(f"Setting new db_path: {db_path} and re-initializing managers.")
+
+        # Close existing keeper connection (if any)
+        if getattr(self, "_keeper", None):
+            try:
+                self._keeper.close()
+            except Exception:
+                pass
+            finally:
+                self._keeper = None
+
         self.db_path = db_path
+
+        # Recreate keeper if moving to shared in-memory DB
+        if isinstance(db_path, str) and db_path.startswith("file:") and "mode=memory" in db_path:
+            try:
+                self._keeper = sqlite3.connect(db_path, uri=True, check_same_thread=False)
+                self._keeper.execute("PRAGMA foreign_keys = ON;")
+                logger.info("Keeper connection established for shared in-memory database (after path change).")
+            except Exception as e:
+                logger.warning(f"Failed to create keeper connection for in-memory DB: {e}")
+
         init_db(db_path)
         self._create_managers(db_path)
