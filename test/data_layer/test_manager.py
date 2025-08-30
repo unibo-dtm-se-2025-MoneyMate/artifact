@@ -1,34 +1,18 @@
-import os
 import gc
-import time
 import pytest
 from MoneyMate.data_layer.manager import DatabaseManager
 
-TEST_DB = "test_manager.db"
-
-def setup_module(module):
-    if os.path.exists(TEST_DB):
-        os.remove(TEST_DB)
-    DatabaseManager(TEST_DB)
-
-def teardown_module(module):
-    gc.collect()
-    for _ in range(10):
-        try:
-            if os.path.exists(TEST_DB):
-                os.remove(TEST_DB)
-            break
-        except PermissionError:
-            time.sleep(0.2)
-    if os.path.exists(TEST_DB):
-        raise PermissionError(f"Unable to delete test database file: {TEST_DB}")
-
 @pytest.fixture
-def dbm():
-    dbm = DatabaseManager(TEST_DB)
-    yield dbm
-    if hasattr(dbm, "close"):
-        dbm.close()
+def dbm(tmp_path):
+    """
+    Provide a fresh DatabaseManager instance backed by a per-test temporary DB file.
+    Using tmp_path avoids Windows file locks and manual cleanup.
+    """
+    db_path = tmp_path / "test_manager.db"
+    db = DatabaseManager(str(db_path))
+    yield db
+    if hasattr(db, "close"):
+        db.close()
     gc.collect()
 
 def test_database_manager_list_tables(dbm):
