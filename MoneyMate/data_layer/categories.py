@@ -20,35 +20,45 @@ class CategoriesManager:
         """
         Adds a new category for the given user. (name must be unique per user)
         """
-        if not name:
+        name_norm = name.strip() if isinstance(name, str) else name
+        if not name_norm:
             return self.dict_response(False, "Category name required")
         try:
             with get_connection(self.db_path) as conn:
                 cur = conn.cursor()
                 cur.execute(
                     "INSERT INTO categories (user_id, name, description, color, icon) VALUES (?, ?, ?, ?, ?)",
-                    (user_id, name, description, color, icon),
+                    (user_id, name_norm, description, color, icon),
                 )
                 conn.commit()
-            logger.info(f"Category '{name}' added for user {user_id}.")
+            logger.info(f"Category '{name_norm}' added for user {user_id}.")
             return self.dict_response(True)
         except Exception as e:
-            logger.error(f"Error adding category '{name}' for user {user_id}: {e}")
+            logger.error(f"Error adding category '{name_norm}' for user {user_id}: {e}")
             if "UNIQUE constraint failed" in str(e):
                 return self.dict_response(False, "Category already exists for this user")
             return self.dict_response(False, str(e))
 
-    def get_categories(self, user_id):
+    def get_categories(self, user_id, limit=None, offset=None):
         """
-        Lists categories for a given user.
+        Lists categories for a given user, ordered by name ASC.
+        Supports optional pagination.
         """
         try:
             with get_connection(self.db_path) as conn:
                 cur = conn.cursor()
-                cur.execute("SELECT id, name, description, color, icon FROM categories WHERE user_id = ? ORDER BY name ASC", (user_id,))
+                sql = "SELECT id, name, description, color, icon FROM categories WHERE user_id = ? ORDER BY name ASC"
+                params = [user_id]
+                if limit is not None:
+                    sql += " LIMIT ?"
+                    params.append(int(limit))
+                    if offset is not None:
+                        sql += " OFFSET ?"
+                        params.append(int(offset))
+                cur.execute(sql, tuple(params))
                 rows = cur.fetchall()
             cats = [
-                {"id": r[0], "name": r[1], "description": r[2], "color": r[3], "icon": r[4]}
+                {"id": r["id"], "name": r["name"], "description": r["description"], "color": r["color"], "icon": r["icon"]}
                 for r in rows
             ]
             logger.info(f"Retrieved {len(cats)} categories for user {user_id}.")
@@ -62,14 +72,21 @@ class CategoriesManager:
         Deletes a category by ID if it belongs to the user.
         Note: expenses referencing this category_id will be left as-is;
         consider cleaning or reassigning at a higher layer if needed.
+
+        Test behavior: for unauthorized/non-existent deletes, return success=True (deleted=0).
         """
         try:
             with get_connection(self.db_path) as conn:
                 cur = conn.cursor()
                 cur.execute("DELETE FROM categories WHERE id = ? AND user_id = ?", (category_id, user_id))
+                deleted = cur.rowcount or 0
                 conn.commit()
-            logger.info(f"Deleted category id={category_id} for user {user_id}.")
-            return self.dict_response(True)
+            if deleted == 0:
+                logger.warning(f"Delete category noop: id={category_id}, user={user_id} (not found or not owned).")
+            else:
+                logger.info(f"Deleted category id={category_id} for user {user_id}.")
+            # For compatibility with existing tests, always return success with deleted count
+            return self.dict_response(True, data={"deleted": deleted})
         except Exception as e:
             logger.error(f"Error deleting category id={category_id} for user {user_id}: {e}")
             return self.dict_response(False, str(e))
