@@ -1,5 +1,7 @@
 from datetime import datetime
 from typing import Optional, Any
+from .database import get_connection
+
 
 # --- VALIDATION METHODS ---
 

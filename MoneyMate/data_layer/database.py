@@ -1,51 +1,22 @@
-"""
-Database utilities for MoneyMate: initialization, connections, and schema management.
-
-This module:
-- Defines a default DB_PATH for the manager default.
-- Initializes the SQLite database with all required tables.
-- Ensures PRAGMA foreign_keys=ON for every connection.
-- Provides a helper to list existing tables.
-
-Schema extensions:
-- categories (per-user custom categories)
-- notes (notes attached to an expense OR transaction OR contact)
-- attachments (files attached to expense/transaction/contact)
-- access_logs (security/audit log)
-- Strengthened foreign key relationships among users, contacts, expenses, transactions
-  with sensible ON DELETE behaviors and indexes.
-
-Important design note (per project tests/specs):
-- expenses.category_id is optional and does NOT have a hard FK to categories.id.
-  This allows deleting categories without nullifying existing expenses; the historical
-  category_id is preserved, while application-level validation ensures only own categories
-  can be assigned on insert.
-"""
-
 import sqlite3
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 
 # Default database path used by DatabaseManager when no path is provided.
 DB_PATH = "moneymate.db"
 
-# Simple schema versioning scaffold for classroom showcase (non-destructive)
-SCHEMA_VERSION = 2  # v2: formalize tightened CHECKS in CREATE TABLE and add migration scaffold
+# Simple schema versioning scaffold
+SCHEMA_VERSION = 2  # v2: tightened CHECKS, migration scaffold
 
 def get_connection(db_path: str) -> sqlite3.Connection:
     """
     Return a new SQLite connection with foreign key support enabled.
-    - Supports SQLite URI for shared in-memory DBs (e.g., file:moneymate?mode=memory&cache=shared).
-    - Sets row_factory to sqlite3.Row for safer row handling.
     """
     if isinstance(db_path, str) and db_path.startswith("file:"):
         conn = sqlite3.connect(db_path, uri=True)
     else:
         conn = sqlite3.connect(db_path)
     conn.execute("PRAGMA foreign_keys = ON;")
-    try:
-        conn.row_factory = sqlite3.Row
-    except Exception:
-        pass
+    conn.row_factory = sqlite3.Row
     return conn
 
 def _get_current_version(cur: sqlite3.Cursor) -> Optional[int]:
@@ -64,32 +35,18 @@ def _set_version(cur: sqlite3.Cursor, version: int) -> None:
 def _migrate(cur: sqlite3.Cursor, from_version: int, to_version: int) -> None:
     """
     Non-destructive migration scaffold.
-    For this showcase, we only bump the version to reflect tightened constraints
-    on new databases (CREATE TABLE path). Existing DBs are left as-is.
     """
-    # Example migration path (no-op by design for this course project)
-    # if from_version < 2:
-    #     ... (add non-breaking indexes or columns if needed)
     _set_version(cur, to_version)
 
 def init_db(db_path: str) -> Dict[str, Any]:
     """
-    Initialize the database with necessary tables if they don't exist.
-    Creates base tables and extended tables with proper indexes.
-    Also performs light, backward-compatible migrations when needed.
+    Initialize the database with necessary tables.
     """
     try:
         conn = get_connection(db_path)
         cur = conn.cursor()
 
-        # Performance/UX pragmas for desktop usage (best-effort)
-        try:
-            cur.execute("PRAGMA journal_mode=WAL;")
-            cur.execute("PRAGMA synchronous=NORMAL;")
-        except Exception:
-            pass
-
-        # Schema version table (create if missing)
+        # Schema version table
         cur.execute("""
             CREATE TABLE IF NOT EXISTS schema_version (
                 version INTEGER NOT NULL
@@ -97,10 +54,9 @@ def init_db(db_path: str) -> Dict[str, Any]:
         """)
         current_version = _get_current_version(cur)
         if current_version is None:
-            # Fresh DB: set to current SCHEMA_VERSION
             _set_version(cur, SCHEMA_VERSION)
 
-        # Core tables (order matters for FKs)
+        # Users
         cur.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -111,6 +67,7 @@ def init_db(db_path: str) -> Dict[str, Any]:
             );
         """)
 
+        # Contacts
         cur.execute("""
             CREATE TABLE IF NOT EXISTS contacts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -123,7 +80,7 @@ def init_db(db_path: str) -> Dict[str, Any]:
         """)
         cur.execute("CREATE INDEX IF NOT EXISTS idx_contacts_user_id ON contacts(user_id);")
 
-        # Expenses (legacy textual category + optional category_id without hard FK)
+        # Expenses
         cur.execute("""
             CREATE TABLE IF NOT EXISTS expenses (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -142,7 +99,7 @@ def init_db(db_path: str) -> Dict[str, Any]:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_user_date ON expenses(user_id, date);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_category_id ON expenses(category_id);")
 
-        # Transactions between users
+        # Transactions
         cur.execute("""
             CREATE TABLE IF NOT EXISTS transactions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -166,7 +123,7 @@ def init_db(db_path: str) -> Dict[str, Any]:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_from_user_date ON transactions(from_user_id, date);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_transactions_to_user_date ON transactions(to_user_id, date);")
 
-        # Per-user custom categories
+        # Categories
         cur.execute("""
             CREATE TABLE IF NOT EXISTS categories (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -246,7 +203,7 @@ def init_db(db_path: str) -> Dict[str, Any]:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_action ON access_logs(action);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_created_at ON access_logs(created_at);")
 
-        # Backward-compatible migration: ensure expenses.category_id exists (older DBs)
+        # Migration: ensure expenses.category_id exists
         cur.execute("PRAGMA table_info(expenses);")
         expense_cols_after = {row["name"] for row in cur.fetchall()}
         if "category_id" not in expense_cols_after:
@@ -256,7 +213,6 @@ def init_db(db_path: str) -> Dict[str, Any]:
             except Exception:
                 pass
 
-        # If version exists and is older, bump to SCHEMA_VERSION (no-op changes)
         current_version = _get_current_version(cur)
         if current_version is not None and current_version < SCHEMA_VERSION:
             _migrate(cur, current_version, SCHEMA_VERSION)
@@ -271,9 +227,25 @@ def init_db(db_path: str) -> Dict[str, Any]:
         except Exception:
             pass
 
+def get_schema_version(db_path: str) -> Dict[str, Any]:
+    try:
+        conn = get_connection(db_path)
+        cur = conn.cursor()
+        cur.execute("SELECT version FROM schema_version LIMIT 1;")
+        row = cur.fetchone()
+        version = int(row["version"]) if row else None
+        return {"success": True, "error": None, "data": version}
+    except Exception as e:
+        return {"success": False, "error": str(e), "data": None}
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
 def list_tables(db_path: str) -> Dict[str, Any]:
     """
-    Return a list of user-defined tables in the database.
+    Return a dict with 'data' key containing user-defined tables.
     """
     try:
         conn = get_connection(db_path)
@@ -295,21 +267,5 @@ def list_tables(db_path: str) -> Dict[str, Any]:
         except Exception:
             pass
 
-def get_schema_version(db_path: str) -> Dict[str, Any]:
-    """
-    Return the current schema version (integer) if available.
-    """
-    try:
-        conn = get_connection(db_path)
-        cur = conn.cursor()
-        cur.execute("SELECT version FROM schema_version LIMIT 1;")
-        row = cur.fetchone()
-        version = int(row["version"]) if row else None
-        return {"success": True, "error": None, "data": version}
-    except Exception as e:
-        return {"success": False, "error": str(e), "data": None}
-    finally:
-        try:
-            conn.close()
-        except Exception:
-            pass
+
+

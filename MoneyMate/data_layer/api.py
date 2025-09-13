@@ -20,12 +20,13 @@ Extended:
 - Contact balance API for user+contact breakdown
 """
 
-from MoneyMate.data_layer.manager import DatabaseManager
-import logging
-import threading
-import MoneyMate.data_layer.logging_config  # Ensure global logging configuration
 
-logger = logging.getLogger(__name__)
+import threading
+from .database import init_db, list_tables
+from .manager import DatabaseManager
+
+from .logging_config import get_logger
+logger = get_logger(__name__)
 
 _db = None
 _db_lock = threading.Lock()
@@ -76,17 +77,19 @@ def api_list_tables():
     logger.info("API call: api_list_tables")
     return get_db().list_tables()
 
-def api_health():
+def api_health(): 
     """
     Lightweight health check for GUI integration.
     Returns: dict {success, error, data: int (schema_version)}
     """
     logger.info("API call: api_health")
-    from MoneyMate.data_layer.database import get_schema_version
+    from .database import get_schema_version  # import relativo corretto
+
     # Use the current db_path from the manager to read version
     db = get_db()
     version_resp = get_schema_version(db.db_path)
     return version_resp
+
 
 # --- USERS API ---
 

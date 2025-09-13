@@ -58,17 +58,14 @@ class MoneyMateApp(tk.Tk):
         frame.tkraise()
 
 import tkinter as tk
-from tkinter import ttk
-from tkinter import messagebox
+from tkinter import ttk, messagebox
 
-# ==========================
-# FRAME SPESE (con ricerca + modifica)
-# ==========================
 class ExpensesFrame(ttk.Frame):
     def __init__(self, parent, controller):
         super().__init__(parent)
         self.controller = controller
 
+        # Titolo della sezione
         ttk.Label(self, text="Inserisci una spesa", font=("Arial", 14)).pack(pady=10)
         form_frame = ttk.Frame(self)
         form_frame.pack(pady=10)
@@ -101,9 +98,7 @@ class ExpensesFrame(ttk.Frame):
             row=4, column=0, columnspan=2, pady=10
         )
 
-        # --------------------
         # Barra di ricerca
-        # --------------------
         search_frame = ttk.Frame(self)
         search_frame.pack(pady=5)
         ttk.Label(search_frame, text="Cerca:").pack(side="left")
@@ -112,7 +107,7 @@ class ExpensesFrame(ttk.Frame):
         ttk.Button(search_frame, text="Filtra", command=self.filter_expenses).pack(side="left")
         ttk.Button(search_frame, text="Reset", command=self.refresh_table).pack(side="left")
 
-        # Tabella spese
+        # Tabella delle spese
         self.table = ttk.Treeview(
             self,
             columns=("data", "descrizione", "categoria", "importo"),
@@ -138,27 +133,31 @@ class ExpensesFrame(ttk.Frame):
         category = self.category_combo.get().strip() or "Altro"
         amount = self.amount_entry.get().strip()
 
+        # Verifica che tutti i campi obbligatori siano presenti
         if not date or not desc or not amount:
             messagebox.showerror("Errore", "Inserisci tutti i campi obbligatori!")
-            return
+            return {"success": False, "error": "Tutti i campi sono obbligatori!"}
 
         try:
-            amount = float(amount)
+            # Gestisce la virgola come separatore decimale
+            amount = float(amount.replace(',', '.'))
         except ValueError:
             messagebox.showerror("Errore", "L'importo deve essere un numero!")
-            return
+            return {"success": False, "error": "L'importo deve essere un numero valido!"}
 
-        # Salvataggio
-        self.controller.expenses.append((date, desc, category, amount))
+        # Salvataggio della spesa (da aggiungere alla lista/array di spese)
+        self.controller.expenses.append({"date": date, "description": desc, "category": category, "amount": amount})
 
-        # Aggiorna tabella
+        # Aggiorna la tabella per visualizzare la nuova spesa
         self.refresh_table()
 
-        # Pulisci campi
+        # Pulisci i campi
         self.date_entry.delete(0, tk.END)
         self.desc_entry.delete(0, tk.END)
         self.category_combo.set("")
         self.amount_entry.delete(0, tk.END)
+
+        return {"success": True, "error": None}
 
     def remove_expense(self):
         selected = self.table.selection()
@@ -171,17 +170,14 @@ class ExpensesFrame(ttk.Frame):
         self.update_total()
 
     def update_total(self):
-        total = sum(amount for *_, amount in self.controller.expenses)
+        total = sum(expense["amount"] for expense in self.controller.expenses)
         self.total_label.config(text=f"Totale spese: {total:.2f} €")
 
-    # --------------------
-    # FILTRO / RICERCA
-    # --------------------
     def filter_expenses(self):
         query = self.search_entry.get().strip().lower()
         filtered = [
             exp for exp in self.controller.expenses
-            if query in exp[0].lower() or query in exp[1].lower() or query in exp[2].lower()
+            if query in exp["date"].lower() or query in exp["description"].lower() or query in exp["category"].lower()
         ]
         self.refresh_table(filtered)
 
@@ -191,13 +187,10 @@ class ExpensesFrame(ttk.Frame):
             self.table.delete(row)
         # Ricarica dati (filtrati o tutti)
         data = data if data is not None else self.controller.expenses
-        for date, desc, category, amount in data:
-            self.table.insert("", "end", values=(date, desc, category, f"{amount:.2f} €"))
+        for expense in data:
+            self.table.insert("", "end", values=(expense["date"], expense["description"], expense["category"], f"{expense['amount']:.2f} €"))
         self.update_total()
 
-    # --------------------
-    # MODIFICA RECORD
-    # --------------------
     def edit_expense(self):
         selected = self.table.selection()
         if not selected:
@@ -214,7 +207,7 @@ class ExpensesFrame(ttk.Frame):
         labels = ["Data (YYYY-MM-DD)", "Descrizione", "Categoria", "Importo (€)"]
         entries = []
 
-        for i, (label, value) in enumerate(zip(labels, old_data)):
+        for i, (label, value) in enumerate(zip(labels, old_data.values())):
             ttk.Label(popup, text=label).grid(row=i, column=0, padx=5, pady=5)
             e = ttk.Entry(popup)
             e.grid(row=i, column=1, padx=5, pady=5)
@@ -232,14 +225,13 @@ class ExpensesFrame(ttk.Frame):
                 return
 
             # Aggiorna nei dati
-            self.controller.expenses[index] = (new_date, new_desc, new_cat, new_amount)
+            self.controller.expenses[index] = {"date": new_date, "description": new_desc, "category": new_cat, "amount": new_amount}
 
             # Ricarica tabella
             self.refresh_table()
             popup.destroy()
 
         ttk.Button(popup, text="Salva", command=save_changes).grid(row=4, column=0, columnspan=2, pady=10)
-
 
         
 # ==========================

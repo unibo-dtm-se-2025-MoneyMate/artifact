@@ -1,8 +1,9 @@
 from .database import get_connection
-import logging
-import MoneyMate.data_layer.logging_config  # Ensure global logging configuration
+from .database import get_connection
+from .manager import DatabaseManager # Ensure global logging configuration
 
-logger = logging.getLogger(__name__)
+from .logging_config import get_logger
+logger = get_logger(__name__)
 
 def _order_clause(order: str) -> str:
     mapping = {
@@ -16,11 +17,12 @@ def _order_clause(order: str) -> str:
 class CategoriesManager:
     """
     Manager class for handling category-related database operations.
-    Per-user custom categories to be used optionally by expenses via category_id.
     """
 
-    def __init__(self, db_path):
+    def __init__(self, db_path, db_manager=None):  # <-- aggiunto db_manager opzionale
         self.db_path = db_path
+        self._db_manager = db_manager  # opzionale, per eventuali future esigenze
+
 
     def dict_response(self, success, error=None, data=None):
         return {"success": success, "error": error, "data": data}

@@ -17,6 +17,7 @@ import time
 import pytest
 from MoneyMate.data_layer.database import init_db, get_connection, list_tables
 
+
 TEST_DB = "test_db_module.db"
 
 def setup_module(module):
@@ -38,17 +39,19 @@ def teardown_module(module):
 
 def test_tables_created():
     """Check if all required core tables are created in the database."""
-    tables_result = list_tables(TEST_DB)
+    tables_result = list_tables(db_path=TEST_DB)  # <<<<< qui cambia
     assert isinstance(tables_result, dict)
     tables = tables_result["data"]
     assert set(tables) >= {"users", "contacts", "expenses", "transactions"}
 
+
 def test_extended_tables_created():
     """Check if extended tables exist: categories, notes, attachments, access_logs."""
-    tables_result = list_tables(TEST_DB)
+    tables_result = list_tables(db_path=TEST_DB)  # <<<<< qui cambia
     assert isinstance(tables_result, dict)
     tables = set(tables_result["data"])
     assert {"categories", "notes", "attachments", "access_logs"}.issubset(tables)
+
 
 def test_get_connection():
     """Test that get_connection returns an active connection to the database."""

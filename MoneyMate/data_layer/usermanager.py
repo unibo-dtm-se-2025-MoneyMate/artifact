@@ -6,24 +6,24 @@ Maintains separation between authentication and business logic.
 Follows best practices for modularity, dependency injection, configurability, error handling, and resource management.
 """
 
-import logging
 from typing import Any, Dict, Optional
 from .database import get_connection
 from werkzeug.security import generate_password_hash, check_password_hash
+from .database import get_connection
+from .manager import DatabaseManager
 
-logger = logging.getLogger(__name__)
+from .logging_config import get_logger
+logger = get_logger(__name__)
 
 class UserManager:
     """
-    Manager for all user-related operations:
-    - Registration
-    - Authentication
-    - Password management (reset/change)
-    - Role management (preparation for future extensions)
+    Manager class for handling user-related operations.
     """
 
-    def __init__(self, db_path: str):
+    def __init__(self, db_path, db_manager=None):  # <-- aggiunto db_manager opzionale
         self.db_path = db_path
+        self._db_manager = db_manager  # opzionale, utile per future necessità
+
 
     def dict_response(self, success: bool, error: Optional[str] = None, data: Any = None) -> Dict[str, Any]:
         """Returns a standardized dictionary for all API responses (MoneyMate convention)."""

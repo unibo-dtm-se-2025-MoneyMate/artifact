@@ -9,16 +9,23 @@ Note:
   can be disabled by setting environment variable MONEYMATE_CONFIGURE_LOGGING=false.
 """
 
+# data_layer/logging_config.py
 import logging
-import os
 
-# Basic configuration for the root logger is opt-in via env var (defaults to True for tests/CLI).
-_configure_root = os.environ.get("MONEYMATE_CONFIGURE_LOGGING", "true").lower() not in ("false", "0", "no")
-_log_level = os.environ.get("MONEYMATE_LOG_LEVEL", "INFO").upper()
-level = getattr(logging, _log_level, logging.INFO)
+def get_logger(name: str) -> logging.Logger:
+    """
+    Return a logger with a simple console configuration.
+    """
+    logger = logging.getLogger(name)
+    if not logger.hasHandlers():
+        logger.setLevel(logging.INFO)
+        ch = logging.StreamHandler()  # Log su console
+        ch.setLevel(logging.INFO)
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+        ch.setFormatter(formatter)
+        logger.addHandler(ch)
+    return logger
 
-if _configure_root:
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s %(levelname)s [%(name)s]: %(message)s",
-    )
+

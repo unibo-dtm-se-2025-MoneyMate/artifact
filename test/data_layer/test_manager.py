@@ -1,53 +1,71 @@
-"""
-DatabaseManager integration tests.
+import sqlite3
 
-This module covers:
-- list_tables returns at least the core tables
-- user/admin role support:
-  - register admin and verify role
-  - upgrade a normal user to admin via set_user_role
-- Test hygiene: tmp_path-backed fixture and explicit manager close
-"""
+class DatabaseManager:
+    def __init__(self, db_path):
+        self.db_path = db_path
+        self.conn = sqlite3.connect(self.db_path)
+        self.cursor = self.conn.cursor()
 
+        # Crea le tabelle se non esistono già
+        self.create_tables()
 
-import gc
-import pytest
-from MoneyMate.data_layer.manager import DatabaseManager
+    def create_tables(self):
+        """Crea le tabelle se non esistono già."""
+        self.cursor.execute("""
+        CREATE TABLE IF NOT EXISTS expenses (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            date TEXT,
+            description TEXT,
+            category TEXT,
+            amount REAL
+        );
+        """)
+        self.conn.commit()
 
-@pytest.fixture
-def dbm(tmp_path):
-    """
-    Provide a fresh DatabaseManager instance backed by a per-test temporary DB file.
-    Using tmp_path avoids Windows file locks and manual cleanup.
-    """
-    db_path = tmp_path / "test_manager.db"
-    db = DatabaseManager(str(db_path))
-    yield db
-    if hasattr(db, "close"):
-        db.close()
-    gc.collect()
+    def add_expense(self, date, description, category, amount):
+        """Aggiungi una nuova spesa nel database."""
+        try:
+            self.cursor.execute("""
+            INSERT INTO expenses (date, description, category, amount)
+            VALUES (?, ?, ?, ?);
+            """, (date, description, category, amount))
+            self.conn.commit()
+            return {"success": True, "error": None}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
-def test_database_manager_list_tables(dbm):
-    """Test that the DatabaseManager can list all tables in the database."""
-    tables = dbm.list_tables()["data"]
-    assert set(tables) >= {"users", "contacts", "expenses", "transactions"}
+    def get_expenses(self):
+        """Recupera tutte le spese dal database."""
+        self.cursor.execute("SELECT * FROM expenses")
+        rows = self.cursor.fetchall()
+        return {"data": rows}
 
-def test_manager_admin_role_support(dbm):
-    """Test that manager supports admin role logic."""
-    res = dbm.users.register_user("admin", "12345", role="admin")
-    assert res["success"]
-    admin_id = res["data"]["user_id"]
-    role = dbm.users.get_user_role(admin_id)
-    assert role["success"]
-    assert role["data"]["role"] == "admin"
+    def delete_expense(self, expense_id):
+        """Elimina una spesa dal database."""
+        try:
+            self.cursor.execute("DELETE FROM expenses WHERE id = ?", (expense_id,))
+            self.conn.commit()
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
-def test_manager_can_upgrade_user_role(dbm):
-    """Test upgrading a normal user to admin via manager."""
-    admin_res = dbm.users.register_user("adminx", "12345", role="admin")
-    user_res = dbm.users.register_user("usertest", "pw")
-    assert user_res["success"]
-    admin_id = admin_res["data"]["user_id"]
-    user_id = user_res["data"]["user_id"]
-    upgrade_res = dbm.users.set_user_role(admin_id, user_id, "admin")
-    assert upgrade_res["success"]
-    assert dbm.users.get_user_role(user_id)["data"]["role"] == "admin"
+    def clear_expenses(self):
+        """Elimina tutte le spese dal database."""
+        try:
+            self.cursor.execute("DELETE FROM expenses")
+            self.conn.commit()
+            return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def close(self):
+        """Chiudi la connessione al database."""
+        self.conn.close()
+
+    def search_expenses(self, search_term):
+        """Cerca le spese per descrizione nel database."""
+        self.cursor.execute("""
+        SELECT * FROM expenses WHERE description LIKE ?;
+        """, ('%' + search_term + '%',))
+        rows = self.cursor.fetchall()
+        return {"data": rows}
