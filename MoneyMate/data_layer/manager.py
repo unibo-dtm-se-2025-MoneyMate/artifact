@@ -8,86 +8,10 @@ All data operations should be accessed through the appropriate manager instance.
 
 from typing import Any, Dict, Optional
 import sqlite3
-from .database import DB_PATH, list_tables
+from .database import DB_PATH, list_tables, init_db
 from .logging_config import get_logger
 
 logger = get_logger(__name__)
-
-
-def init_db(db_path: str):
-    """
-    Create all required tables if they don't already exist.
-    Tests expect at least: contacts, expenses, transactions, users, access_logs.
-    """
-    conn = sqlite3.connect(db_path)
-    conn.row_factory = sqlite3.Row
-    cur = conn.cursor()
-
-    # USERS
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            is_admin INTEGER DEFAULT 0
-        )
-    """)
-
-    # CONTACTS
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS contacts (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL,
-            user_id INTEGER NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            UNIQUE(name, user_id),
-            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-    """)
-
-    # EXPENSES
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS expenses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            titolo TEXT NOT NULL,
-            prezzo REAL NOT NULL,
-            data TEXT NOT NULL,
-            user_id INTEGER NOT NULL,
-            note TEXT,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-    """)
-
-    # TRANSACTIONS
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS transactions (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            sender_id INTEGER NOT NULL,
-            receiver_id INTEGER NOT NULL,
-            contact_id INTEGER,
-            amount REAL NOT NULL,
-            type TEXT CHECK(type IN ('debit','credit')) NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(sender_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY(receiver_id) REFERENCES users(id) ON DELETE CASCADE,
-            FOREIGN KEY(contact_id) REFERENCES contacts(id) ON DELETE SET NULL
-        )
-    """)
-
-    # ACCESS LOGS
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS access_logs (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER NOT NULL,
-            action TEXT NOT NULL,
-            timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
-        )
-    """)
-
-    conn.commit()
-    conn.close()
 
 
 def dict_response(success: bool, error: Optional[str] = None, data: Any = None) -> Dict[str, Any]:
@@ -165,16 +89,13 @@ class DatabaseManager:
 
     def list_tables(self):
         """
-        Return the raw list of tables (as tests expect).
+        Return the dict response format (as the working tests expect).
         """
         try:
-            tables = list_tables(self.db_path)
-            if isinstance(tables, dict):
-                return tables.get("tables", [])
-            return tables
+            return list_tables(self.db_path)
         except Exception as e:
             logger.error(f"Error listing tables: {e}")
-            return []
+            return {"success": False, "error": str(e), "data": []}
 
     def set_db_path(self, db_path: str) -> None:
         logger.info(f"Setting new db_path: {db_path} and re-initializing managers.")

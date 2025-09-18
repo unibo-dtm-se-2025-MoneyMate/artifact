@@ -196,6 +196,7 @@ class TransactionsManager:
                     SELECT
                         COALESCE(SUM(CASE WHEN to_user_id = ? AND type='credit' THEN amount ELSE 0 END),0) AS credits_received,
                         COALESCE(SUM(CASE WHEN from_user_id = ? AND type='debit' THEN amount ELSE 0 END),0) AS debits_sent
+                    FROM transactions
                     """,
                     (user_id, user_id)
                 )
@@ -218,6 +219,7 @@ class TransactionsManager:
                         COALESCE(SUM(CASE WHEN from_user_id = ? AND type='debit' THEN amount ELSE 0 END),0) AS debits_sent,
                         COALESCE(SUM(CASE WHEN from_user_id = ? AND type='credit' THEN amount ELSE 0 END),0) AS credits_sent,
                         COALESCE(SUM(CASE WHEN to_user_id = ? AND type='debit' THEN amount ELSE 0 END),0) AS debits_received
+                    FROM transactions
                     """,
                     (user_id, user_id, user_id, user_id)
                 )
