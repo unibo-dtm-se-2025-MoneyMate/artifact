@@ -19,9 +19,6 @@ def _order_clause(order: str) -> str:
 
 
 def dict_response(success: bool, error: Optional[str] = None, data: Any = None) -> Dict[str, Any]:
-    """
-    Standardized response dictionary.
-    """
     return {"success": success, "error": error if not success else None, "data": data}
 
 
@@ -92,8 +89,7 @@ class ExpensesManager:
                         (title, price, date, category, user_id)
                     )
                 conn.commit()
-                expense_id = cursor.lastrowid
-            return dict_response(True, data={"id": expense_id})
+            return dict_response(True)
         except Exception as e:
             logger.error(f"Error adding expense '{title}': {e}")
             return dict_response(False, str(e))
@@ -104,7 +100,7 @@ class ExpensesManager:
         if title is not None:
             title_norm = title.strip() if isinstance(title, str) else title
             if not title_norm:
-                return dict_response(False, "Missing required field: title")
+                return dict_response(False, "Missing title")
             fields["title"] = title_norm
 
         if price is not None:
@@ -126,7 +122,7 @@ class ExpensesManager:
         if category is not None:
             category_norm = category.strip() if isinstance(category, str) else category
             if not category_norm:
-                return dict_response(False, "Missing required field: category")
+                return dict_response(False, "All fields required")
             fields["category"] = category_norm
 
         try:
@@ -159,7 +155,7 @@ class ExpensesManager:
             with get_connection(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 include_category_fk = self._has_column(conn, "expenses", "category_id")
-                select_cols = "id, title, price, date, category, user_id, created_at" + (", category_id" if include_category_fk else "")
+                select_cols = "id, title, price, date, category" + (", category_id" if include_category_fk else "")
                 where = ["user_id = ?"]
                 params = [user_id]
                 if date_from:
@@ -191,7 +187,7 @@ class ExpensesManager:
             with get_connection(self.db_path) as conn:
                 conn.row_factory = sqlite3.Row
                 include_category_fk = self._has_column(conn, "expenses", "category_id")
-                select_cols = "id, title, price, date, category, user_id, created_at" + (", category_id" if include_category_fk else "")
+                select_cols = "id, title, price, date, category" + (", category_id" if include_category_fk else "")
                 where = ["user_id = ?", "(title LIKE ? COLLATE NOCASE OR category LIKE ? COLLATE NOCASE)"]
                 params = [user_id, f"%{query}%", f"%{query}%"]
                 if date_from:

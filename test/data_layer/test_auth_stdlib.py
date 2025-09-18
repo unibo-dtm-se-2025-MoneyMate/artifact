@@ -1,0 +1,56 @@
+import sqlite3
+import unittest
+from MoneyMate.data_layer.auth import (
+    init_auth_schema,
+    register_user,
+    authenticate,
+    verify_session,
+    logout,
+    change_password,
+)
+
+class TestAuthStdlib(unittest.TestCase):
+    def setUp(self):
+        self.conn = sqlite3.connect(":memory:")
+        init_auth_schema(self.conn)
+
+    def test_register_login_verify_logout(self):
+        ok, uid, reason = register_user(self.conn, "bob", "bob@example.com", "StrongPassw0rd!")
+        self.assertTrue(ok, reason)
+        self.assertIsInstance(uid, int)
+
+        res = authenticate(self.conn, "bob", "StrongPassw0rd!")
+        self.assertTrue(res.ok, res.reason)
+        self.assertIsNotNone(res.token)
+
+        valid, row, err = verify_session(self.conn, res.token)
+        self.assertTrue(valid, err)
+        self.assertEqual(row["username"], "bob")
+
+        logout(self.conn, res.token)
+        valid2, row2, err2 = verify_session(self.conn, res.token)
+        self.assertFalse(valid2)
+
+    def test_wrong_password_and_lockout(self):
+        register_user(self.conn, "carol", "carol@example.com", "AnotherStrong1!")
+        for _ in range(5):
+            res = authenticate(self.conn, "carol", "bad")
+            self.assertFalse(res.ok)
+        res2 = authenticate(self.conn, "carol", "AnotherStrong1!")
+        self.assertFalse(res2.ok)
+        self.assertIn("bloccato", res2.reason.lower())
+
+    def test_change_password(self):
+        ok, uid, _ = register_user(self.conn, "dave", "dave@example.com", "OldPassword123!")
+        self.assertTrue(ok)
+        res = authenticate(self.conn, "dave", "OldPassword123!")
+        self.assertTrue(res.ok)
+        ok2, reason = change_password(self.conn, uid, "OldPassword123!", "NewPassword456!")
+        self.assertTrue(ok2, reason)
+        res2 = authenticate(self.conn, "dave", "NewPassword456!")
+        self.assertTrue(res2.ok)
+        res3 = authenticate(self.conn, "dave", "OldPassword123!")
+        self.assertFalse(res3.ok)
+
+if __name__ == "__main__":
+    unittest.main()
