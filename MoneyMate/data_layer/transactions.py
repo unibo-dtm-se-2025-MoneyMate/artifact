@@ -59,6 +59,8 @@ class TransactionsManager:
                     (from_user_id, to_user_id, type_, float(amount), date, description, contact_id)
                 )
                 conn.commit()
+                transaction_id = cursor.lastrowid
+            logger.info(f"Transaction from user {from_user_id} to user {to_user_id} ({type_}, {amount}) added (id={transaction_id})")
             return self.dict_response(True)
         except Exception as e:
             logger.error(f"Error adding transaction: {e}")
@@ -117,6 +119,10 @@ class TransactionsManager:
                 cursor.execute("DELETE FROM transactions WHERE id = ? AND from_user_id = ?", (transaction_id, user_id))
                 deleted = cursor.rowcount or 0
                 conn.commit()
+            if deleted > 0:
+                logger.info(f"Deleted transaction id={transaction_id} for user {user_id}")
+            else:
+                logger.info(f"Delete transaction noop: id={transaction_id} not found for user {user_id}")
             return self.dict_response(True, data={"deleted": deleted})
         except Exception as e:
             logger.error(f"Error deleting transaction: {e}")
@@ -181,6 +187,7 @@ class TransactionsManager:
             total_credit = sum(r["total"] for r in rows if r["type"] == "credit")
             total_debit = sum(r["total"] for r in rows if r["type"] == "debit")
             balance = total_credit - total_debit
+            logger.info(f"Calculated balance for user ID {user_id}: {balance}")
             return self.dict_response(True, data=balance)
         except Exception as e:
             logger.error(f"Error calculating user balance: {e}")

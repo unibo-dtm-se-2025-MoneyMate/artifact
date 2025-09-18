@@ -93,6 +93,7 @@ class ExpensesManager:
                     )
                 conn.commit()
                 expense_id = cursor.lastrowid
+            logger.info(f"Expense '{title}' added for user {user_id} (id={expense_id})")
             return dict_response(True, data={"id": expense_id})
         except Exception as e:
             logger.error(f"Error adding expense '{title}': {e}")
@@ -226,6 +227,10 @@ class ExpensesManager:
                 cursor.execute("DELETE FROM expenses WHERE id = ? AND user_id = ?", (expense_id, user_id))
                 deleted = cursor.rowcount or 0
                 conn.commit()
+            if deleted > 0:
+                logger.info(f"Deleted expense id={expense_id} for user {user_id}")
+            else:
+                logger.info(f"Delete expense noop: id={expense_id} not found for user {user_id}")
             return dict_response(True, data={"deleted": deleted})
         except Exception as e:
             logger.error(f"Error deleting expense id={expense_id}: {e}")
@@ -239,6 +244,7 @@ class ExpensesManager:
                 cursor.execute("DELETE FROM expenses WHERE user_id = ?", (user_id,))
                 deleted = cursor.rowcount or 0
                 conn.commit()
+            logger.info(f"Cleared all expenses for user {user_id} (deleted {deleted} expenses)")
             return dict_response(True, data={"deleted": deleted})
         except Exception as e:
             logger.error(f"Error clearing expenses for user {user_id}: {e}")
