@@ -1,6 +1,6 @@
 import sqlite3
 import unittest
-from data_layer.auth import (
+from MoneyMate.data_layer.auth import (
     init_auth_schema,
     register_user,
     authenticate,
