@@ -153,3 +153,4 @@ MoneyMate/data/**/*.db
 *.sqlite-shm
 *.sqlite-wal
 *.sqlite-journal
+*.db
