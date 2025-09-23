@@ -1,0 +1,1 @@
+# Rende 'test' un package, così unittest -t . non collide con la stdlib "test".

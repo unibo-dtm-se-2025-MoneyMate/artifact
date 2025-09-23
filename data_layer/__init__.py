@@ -1,7 +1,8 @@
-import logging
-from MoneyMate.data_layer.manager import DatabaseManager, dict_response
+"""
+Compatibility shim: expose DatabaseManager at top-level 'data_layer' for tests.
 
-# Evita "No handler found" se l'app non configura logging
-logging.getLogger("MoneyMate").addHandler(logging.NullHandler())
+The implementation lives under MoneyMate.data_layer.manager.
+"""
+from MoneyMate.data_layer.manager import DatabaseManager
 
-__all__ = ["DatabaseManager", "dict_response"]
+__all__ = ["DatabaseManager"]

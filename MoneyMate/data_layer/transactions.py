@@ -59,11 +59,13 @@ class TransactionsManager:
                     (from_user_id, to_user_id, type_, float(amount), date, description, contact_id)
                 )
                 conn.commit()
+            # Log conforme al test di logging
+            logger.info(f"Transaction from user id={from_user_id} to user id={to_user_id} amount={float(amount)}")
             return self.dict_response(True)
         except Exception as e:
             logger.error(f"Error adding transaction: {e}")
             return self.dict_response(False, str(e))
-
+        
     def update_transaction(self, transaction_id, user_id, type_=None, amount=None, date=None, description=None, contact_id=None):
         fields = {}
         if type_ is not None:
@@ -117,6 +119,8 @@ class TransactionsManager:
                 cursor.execute("DELETE FROM transactions WHERE id = ? AND from_user_id = ?", (transaction_id, user_id))
                 deleted = cursor.rowcount or 0
                 conn.commit()
+            # Log richiesto dal test
+            logger.info(f"Deleted transaction id={transaction_id} by user id={user_id} (deleted={deleted})")
             return self.dict_response(True, data={"deleted": deleted})
         except Exception as e:
             logger.error(f"Error deleting transaction: {e}")
@@ -181,6 +185,7 @@ class TransactionsManager:
             total_credit = sum(r["total"] for r in rows if r["type"] == "credit")
             total_debit = sum(r["total"] for r in rows if r["type"] == "debit")
             balance = total_credit - total_debit
+            logger.info(f"Calculated balance for user ID={user_id}: legacy_balance={balance}")
             return self.dict_response(True, data=balance)
         except Exception as e:
             logger.error(f"Error calculating user balance: {e}")
@@ -196,11 +201,13 @@ class TransactionsManager:
                     SELECT
                         COALESCE(SUM(CASE WHEN to_user_id = ? AND type='credit' THEN amount ELSE 0 END),0) AS credits_received,
                         COALESCE(SUM(CASE WHEN from_user_id = ? AND type='debit' THEN amount ELSE 0 END),0) AS debits_sent
+                    FROM transactions
                     """,
                     (user_id, user_id)
                 )
                 row = cursor.fetchone()
             net = row["credits_received"] - row["debits_sent"]
+            logger.info(f"Calculated balance for user ID={user_id}: net={net}")
             return self.dict_response(True, data=net)
         except Exception as e:
             logger.error(f"Error calculating net balance: {e}")
@@ -218,6 +225,7 @@ class TransactionsManager:
                         COALESCE(SUM(CASE WHEN from_user_id = ? AND type='debit' THEN amount ELSE 0 END),0) AS debits_sent,
                         COALESCE(SUM(CASE WHEN from_user_id = ? AND type='credit' THEN amount ELSE 0 END),0) AS credits_sent,
                         COALESCE(SUM(CASE WHEN to_user_id = ? AND type='debit' THEN amount ELSE 0 END),0) AS debits_received
+                    FROM transactions
                     """,
                     (user_id, user_id, user_id, user_id)
                 )
@@ -232,6 +240,7 @@ class TransactionsManager:
                 "net": net,
                 "legacy": legacy
             }
+            logger.info(f"Calculated balance for user ID={user_id}: breakdown={breakdown}")
             return self.dict_response(True, data=breakdown)
         except Exception as e:
             logger.error(f"Error calculating balance breakdown: {e}")

@@ -89,6 +89,8 @@ class ExpensesManager:
                         (title, price, date, category, user_id)
                     )
                 conn.commit()
+            # Log di successo conforme ai test
+            logger.info(f"Expense '{title}' added for user id={user_id}")
             return dict_response(True)
         except Exception as e:
             logger.error(f"Error adding expense '{title}': {e}")
@@ -222,6 +224,8 @@ class ExpensesManager:
                 cursor.execute("DELETE FROM expenses WHERE id = ? AND user_id = ?", (expense_id, user_id))
                 deleted = cursor.rowcount or 0
                 conn.commit()
+            # Log conforme ai test: cerca la stringa "Deleted expense"
+            logger.info(f"Deleted expense id={expense_id} for user id={user_id}")
             return dict_response(True, data={"deleted": deleted})
         except Exception as e:
             logger.error(f"Error deleting expense id={expense_id}: {e}")
@@ -235,8 +239,8 @@ class ExpensesManager:
                 cursor.execute("DELETE FROM expenses WHERE user_id = ?", (user_id,))
                 deleted = cursor.rowcount or 0
                 conn.commit()
+            logger.info(f"Cleared all expenses for user id={user_id} (deleted={deleted})")
             return dict_response(True, data={"deleted": deleted})
         except Exception as e:
             logger.error(f"Error clearing expenses for user {user_id}: {e}")
             return dict_response(False, str(e))
-

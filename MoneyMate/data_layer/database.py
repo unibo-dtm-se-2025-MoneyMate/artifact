@@ -1,5 +1,5 @@
 import sqlite3
-from typing import Dict, Any, Optional, List
+from typing import Dict, Any, Optional
 
 # Default database path used by DatabaseManager when no path is provided.
 DB_PATH = "moneymate.db"
@@ -203,16 +203,48 @@ def init_db(db_path: str) -> Dict[str, Any]:
         cur.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_action ON access_logs(action);")
         cur.execute("CREATE INDEX IF NOT EXISTS idx_access_logs_created_at ON access_logs(created_at);")
 
-        # Migration: ensure expenses.category_id exists
-        cur.execute("PRAGMA table_info(expenses);")
-        expense_cols_after = {row["name"] for row in cur.fetchall()}
-        if "category_id" not in expense_cols_after:
-            try:
+        # --- NON-DESTRUCTIVE MIGRATIONS (before commit) ---
+
+        # Ensure expenses.category_id exists (old DBs)
+        try:
+            cur.execute("PRAGMA table_info(expenses);")
+            expense_cols = {row["name"] for row in cur.fetchall()}
+            if "category_id" not in expense_cols:
                 cur.execute("ALTER TABLE expenses ADD COLUMN category_id INTEGER;")
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_expenses_category_id ON expenses(category_id);")
-            except Exception:
-                pass
+        except Exception:
+            pass
 
+        # Ensure categories.user_id exists (old DBs)
+        try:
+            cur.execute("PRAGMA table_info(categories);")
+            cat_cols = {row["name"] for row in cur.fetchall()}
+            if "user_id" not in cat_cols:
+                cur.execute("ALTER TABLE categories ADD COLUMN user_id INTEGER;")
+        except Exception:
+            pass
+
+        # Ensure transactions.from_user_id / to_user_id exist (old DBs)
+        try:
+            cur.execute("PRAGMA table_info(transactions);")
+            tx_cols = {row["name"] for row in cur.fetchall()}
+            if "from_user_id" not in tx_cols:
+                cur.execute("ALTER TABLE transactions ADD COLUMN from_user_id INTEGER;")
+            if "to_user_id" not in tx_cols:
+                cur.execute("ALTER TABLE transactions ADD COLUMN to_user_id INTEGER;")
+        except Exception:
+            pass
+
+        # Ensure users.is_active exists (used by user manager)
+        try:
+            cur.execute("PRAGMA table_info(users);")
+            usr_cols = {row["name"] for row in cur.fetchall()}
+            if "is_active" not in usr_cols:
+                cur.execute("ALTER TABLE users ADD COLUMN is_active INTEGER NOT NULL DEFAULT 1;")
+        except Exception:
+            pass
+
+        # Bump schema version if needed
         current_version = _get_current_version(cur)
         if current_version is not None and current_version < SCHEMA_VERSION:
             _migrate(cur, current_version, SCHEMA_VERSION)
@@ -266,6 +298,3 @@ def list_tables(db_path: str) -> Dict[str, Any]:
             conn.close()
         except Exception:
             pass
-
-
-
