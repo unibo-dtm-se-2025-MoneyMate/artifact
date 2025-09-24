@@ -20,25 +20,39 @@ A simple template of a Python project, with a rigid file structure, and predispo
 ## Project structure 
 
 Overview:
-```bash
-<root directory>
-├── MoneyMate/             # main package (should be named after your project)
-│   ├── __init__.py         # python package marker
-│   └── __main__.py         # application entry point
-├── test/                   # test package (should contain unit tests)
-├── .github/                # configuration of GitHub CI
-│   └── workflows/          # configuration of GitHub Workflows
-│       ├── check.yml       # runs tests on multiple OS and versions of Python
-│       └── deploy.yml      # if check succeeds, and the current branch is one of {main, master}, triggers automatic releas on PyPi
-├── MANIFEST.in             # file stating what to include/exclude in releases 
-├── LICENSE                 # license file (Apache 2.0 by default)
-├── pyproject.toml          # declares build dependencies
-├── renovate.json           # configuration of Renovate bot, for automatic dependency updates
-├── requirements-dev.txt    # declares development dependencies
-├── requirements.txt        # declares runtime dependencies
-├── setup.py                # configuration of the package to be released on Pypi
-└── Dockerfile              # configuration of the Docker image to be realsed on Dockerhub
-```
+<root>/
+├── src/
+│   └── moneymate/
+│       ├── __init__.py
+│       ├── __main__.py
+│       ├── cli.py
+│       ├── data/                 
+│       │   ├── __init__.py
+│       │   └── database.py       
+│       ├── models/               
+│       ├── services/             
+│       ├── config/               
+│       └── utils/
+├── MoneyMate/                   
+│   ├── __init__.py
+│   └── __main__.py
+├── tests/
+│   ├── unit/
+│   │   └── test_data_layer.py
+│   ├── integration/              
+│   └── conftest.py
+├── sql/                        
+├── scripts/                      
+├── pyproject.toml
+├── README.md
+├── LICENSE
+├── CHANGELOG.md
+├── .github/
+│   └── workflows/
+│       ├── ci.yml
+│       └── release.yml
+├── renovate.json
+└──.gitignore
 
 ## TODO-list for template usage
 
