@@ -19,30 +19,31 @@ A simple template of a Python project, with a rigid file structure, and predispo
 
 ## Project structure 
 
-Overview:
-<root>/
+
+```text
+.
 ├── src/
 │   └── moneymate/
 │       ├── __init__.py
 │       ├── __main__.py
 │       ├── cli.py
-│       ├── data/                 
+│       ├── data/
 │       │   ├── __init__.py
-│       │   └── database.py       
-│       ├── models/               
-│       ├── services/             
-│       ├── config/               
+│       │   └── database.py
+│       ├── models/
+│       ├── services/
+│       ├── config/
 │       └── utils/
-├── MoneyMate/                   
+├── MoneyMate/
 │   ├── __init__.py
 │   └── __main__.py
 ├── tests/
 │   ├── unit/
 │   │   └── test_data_layer.py
-│   ├── integration/              
+│   ├── integration/
 │   └── conftest.py
-├── sql/                        
-├── scripts/                      
+├── sql/
+├── scripts/
 ├── pyproject.toml
 ├── README.md
 ├── LICENSE
@@ -52,7 +53,8 @@ Overview:
 │       ├── ci.yml
 │       └── release.yml
 ├── renovate.json
-└──.gitignore
+└── .gitignore
+```
 
 ## TODO-list for template usage
 
