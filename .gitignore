@@ -154,3 +154,7 @@ MoneyMate/data/**/*.db
 *.sqlite-wal
 *.sqlite-journal
 *.db
+# Virtual env ignore
+.venv*/
+.venv39/
+venv/
