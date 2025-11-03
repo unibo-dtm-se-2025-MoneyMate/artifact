@@ -2,7 +2,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox, simpledialog
 from MoneyMate.data_layer.api import (
     api_add_expense, api_get_expenses, api_delete_expense,
-    api_update_expense, api_get_categories # Added for categories combobox
+    api_update_expense, api_get_categories, api_search_expenses # Added for categories combobox and search
 )
 from datetime import datetime # For date validation
 

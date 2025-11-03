@@ -1,9 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, messagebox
-from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
-import matplotlib.pyplot as plt
 from collections import defaultdict
-import matplotlib.dates as mdates
+import importlib
+from collections import defaultdict
 from datetime import datetime
 
 from MoneyMate.data_layer.api import api_get_expenses, api_get_user_balance_breakdown, api_get_categories
@@ -25,6 +24,23 @@ class ChartsFrame(ttk.Frame):
 
     def refresh(self):
         """Generate and display the charts."""
+        # helper: resilient date parsing for multiple possible formats
+        def _parse_date(date_str):
+            if not date_str:
+                raise ValueError("empty date")
+            # try common formats
+            fmts = ('%Y-%m-%d', '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S')
+            for f in fmts:
+                try:
+                    return datetime.strptime(date_str, f)
+                except Exception:
+                    continue
+            # as last resort, try to parse only the date portion
+            try:
+                return datetime.strptime(date_str.split(' ')[0], '%Y-%m-%d')
+            except Exception:
+                # re-raise to let caller skip this entry
+                raise
         if not self.controller.user_id:
             messagebox.showwarning("Info", "Log in to view charts.")
             # Clear previous charts if any
@@ -72,6 +88,17 @@ class ChartsFrame(ttk.Frame):
 
         # Use subplots to organize charts
         # Increase figsize if needed
+        # Dynamic import of matplotlib modules to avoid import-time failures
+        try:
+            plt = importlib.import_module('matplotlib.pyplot')
+            mdates = importlib.import_module('matplotlib.dates')
+        except Exception as e:
+            print(f"matplotlib not available: {e}")
+            for widget in self.charts_container.winfo_children():
+                widget.destroy()
+            ttk.Label(self.charts_container, text="Charts cannot be displayed (matplotlib missing)").pack(pady=10)
+            return
+
         fig, axes = plt.subplots(2, 2, figsize=(10, 8)) # 2x2 grid
         fig.subplots_adjust(hspace=0.4, wspace=0.3) # Spacing between charts
 
@@ -111,7 +138,7 @@ class ChartsFrame(ttk.Frame):
             for exp in expenses_data:
                 try:
                     # Convert date string to datetime object for sorting and plotting
-                    date_obj = datetime.strptime(exp.get("date"), '%Y-%m-%d')
+                    date_obj = _parse_date(exp.get("date"))
                     dates.append(date_obj)
                     expenses_by_date[date_obj] += float(exp.get("price", 0))
                 except (ValueError, TypeError, KeyError):
@@ -146,11 +173,18 @@ class ChartsFrame(ttk.Frame):
         ax3 = axes[1, 0]
         if balance_data:
             labels = ['Credits Received', 'Debits Sent', 'Credits Sent', 'Debits Received']
+            # Ensure numeric values (coerce to float, fallback to 0.0)
+            def _num(v):
+                try:
+                    return float(v)
+                except Exception:
+                    return 0.0
+
             values = [
-                balance_data.get('credits_received', 0),
-                balance_data.get('debits_sent', 0),
-                balance_data.get('credits_sent', 0),
-                balance_data.get('debits_received', 0)
+                _num(balance_data.get('credits_received', 0)),
+                _num(balance_data.get('debits_sent', 0)),
+                _num(balance_data.get('credits_sent', 0)),
+                _num(balance_data.get('debits_received', 0))
             ]
             colors = ['green', 'red', 'lightgreen', 'salmon']
 
@@ -190,14 +224,29 @@ class ChartsFrame(ttk.Frame):
 
 
         # --- Embed into Tkinter Canvas ---
+        # Import the TkAgg canvas lazily: importing backend_tkagg at module import
+        # time can fail in headless environments or where tkinter is not available.
+        try:
+            backend_mod = importlib.import_module('matplotlib.backends.backend_tkagg')
+            FigureCanvasTkAgg = getattr(backend_mod, 'FigureCanvasTkAgg')
+        except Exception as e:
+            # Can't render embedded charts; show a helpful message instead of raising.
+            print(f"matplotlib TkAgg backend not available: {e}")
+            for widget in self.charts_container.winfo_children():
+                widget.destroy()
+            ttk.Label(self.charts_container, text="Charts cannot be displayed (missing Tk backend)").pack(pady=10)
+            # still close the figure to free memory
+            plt.close(fig)
+            return
+
         try:
             canvas = FigureCanvasTkAgg(fig, master=self.charts_container)
             canvas_widget = canvas.get_tk_widget()
             canvas_widget.pack(fill=tk.BOTH, expand=True)
             canvas.draw()
         except Exception as e:
-             print(f"Error rendering charts: {e}")
-             messagebox.showerror("Chart Error", f"Could not display charts.\n{e}")
+            print(f"Error rendering charts: {e}")
+            messagebox.showerror("Chart Error", f"Could not display charts.\n{e}")
         finally:
-             # Close the figure to free memory, even on error
-             plt.close(fig)
+            # Close the figure to free memory, even on error
+            plt.close(fig)
