@@ -31,12 +31,12 @@ class LoginFrame(ttk.Frame):
         # Registration Form (initially hidden or separate)
         reg_form = ttk.Frame(center_frame, padding="10")
         reg_form.pack(pady=10)
-        ttk.Label(reg_form, text="Don't have an account? Register").pack(pady=5)
+        ttk.Label(reg_form, text="Don't have an account? Register").grid(row=0, column=0, columnspan=2, pady=5)
 
 
-        ttk.Label(reg_form, text="Username:").grid(row=0, column=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Label(reg_form, text="Username:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
         self.reg_user_entry = ttk.Entry(reg_form, width=30)
-        self.reg_user_entry.grid(row=0, column=1, padx=5, pady=5)
+        self.reg_user_entry.grid(row=1, column=1, padx=5, pady=5)
 
         # You could also add email if your data layer requires it
         # ttk.Label(reg_form, text="Email:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
@@ -44,9 +44,9 @@ class LoginFrame(ttk.Frame):
         # self.reg_email_entry.grid(row=1, column=1, padx=5, pady=5)
 
 
-        ttk.Label(reg_form, text="Password:").grid(row=1, column=0, sticky=tk.W, padx=5, pady=5)
+        ttk.Label(reg_form, text="Password:").grid(row=2, column=0, sticky=tk.W, padx=5, pady=5)
         self.reg_pass_entry = ttk.Entry(reg_form, show="*", width=30)
-        self.reg_pass_entry.grid(row=1, column=1, padx=5, pady=5)
+        self.reg_pass_entry.grid(row=2, column=1, padx=5, pady=5)
 
         # You could add password confirmation
         # ttk.Label(reg_form, text="Confirm Password:").grid(row=3, column=0, sticky=tk.W, padx=5, pady=5)
@@ -55,7 +55,7 @@ class LoginFrame(ttk.Frame):
 
 
         reg_button = ttk.Button(reg_form, text="Register", command=self.attempt_registration)
-        reg_button.grid(row=2, column=0, columnspan=2, pady=15)
+        reg_button.grid(row=3, column=0, columnspan=2, pady=15)
 
 
     def attempt_login(self):
