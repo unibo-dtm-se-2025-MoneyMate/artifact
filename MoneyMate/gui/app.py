@@ -8,6 +8,7 @@ from .expenses_frame import ExpensesFrame
 from .contacts_frame import ContactsFrame
 from .transactions_frame import TransactionsFrame
 from .charts_frame import ChartsFrame
+from .categories_frame import CategoriesFrame # Importa il nuovo frame
 
 # Import data layer APIs
 from MoneyMate.data_layer.api import set_db_path, api_logout_user
@@ -19,7 +20,6 @@ db_file_path = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', 'da
 os.makedirs(os.path.dirname(db_file_path), exist_ok=True) # Create the data folder if it doesn't exist
 set_db_path(db_file_path)
 print(f"GUI: Using database: {db_file_path}")
-
 
 class MoneyMateGUI(tk.Tk):
     def __init__(self, *args, **kwargs):
@@ -147,7 +147,7 @@ class MoneyMateGUI(tk.Tk):
         self.main_area.grid_columnconfigure(0, weight=1)
 
         # Add all frames (including login)
-        for F in (LoginFrame, ExpensesFrame, ContactsFrame, TransactionsFrame, ChartsFrame):
+        for F in (LoginFrame, ExpensesFrame, CategoriesFrame, ContactsFrame, TransactionsFrame, ChartsFrame):
             page_name = F.__name__
             frame = F(parent=self.main_area, controller=self)
             # Apply the content frame style to all main pages
@@ -205,6 +205,7 @@ class MoneyMateGUI(tk.Tk):
          buttons = {
             "Dashboard": ("ChartsFrame", "📊"),
             "Expenses": ("ExpensesFrame", "💳"),
+            "Categories": ("CategoriesFrame", "🏷️"),
             "Transactions": ("TransactionsFrame", "💸"),
             "Contacts": ("ContactsFrame", "👥"),
          }
