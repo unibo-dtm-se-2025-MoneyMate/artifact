@@ -214,9 +214,9 @@ class TransactionsFrame(ttk.Frame):
 
          result = api_get_user_net_balance(self.controller.user_id)
          if result["success"]:
-             balance = result["data"]
-             color = self.controller.SUCCESS_COLOR if balance >= 0 else self.controller.ERROR_COLOR
-             self.balance_label.config(text=f"Net Balance: {balance:.2f} €", foreground=color)
+            balance = result["data"]["net_balance"] # <-- ACCEDI ALLA CHIAVE "net_balance"
+            color = self.controller.SUCCESS_COLOR if balance >= 0 else self.controller.ERROR_COLOR
+            self.balance_label.config(text=f"Net Balance: {balance:.2f} €", foreground=color)
          else:
              self.balance_label.config(text="Net Balance: Error €", foreground=self.controller.ERROR_COLOR)
 
