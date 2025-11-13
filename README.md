@@ -1,3 +1,52 @@
+# MoneyMate
+
+A personal finance management application featuring a robust SQLite-based backend and a user-friendly Tkinter GUI.  
+It manages users, contacts, categories, expenses, and user-to-user transactions, providing visual insights through a dashboard.
+
+---
+
+## Key Features
+
+### Graphical User Interface (GUI)
+- **Dashboard**: Visual charts (powered by Matplotlib) showing expense distribution by category, spending trends over time, and transaction flow summaries.
+- **Expense Management**: Add, edit, remove, and filter expenses. Supports custom dates and categorization.
+- **Transaction Tracking**: Record debits/credits with contacts. Automatic calculation of legacy and net balances.
+- **Category Management**: Create and manage custom expense categories with descriptions.
+- **Contact Management**: Maintain an address book for easier transaction entry.
+- **Authentication**: Secure login/registration system with password hashing and audit logging.
+
+### Data Layer (Backend)
+- **Modular Architecture**: Separation of concerns with dedicated managers for Users, Contacts, Expenses, Transactions, and Categories.
+- **SQLite Database**: Automatic schema initialization, foreign key enforcement, and optimization indices.
+- **Unified API**: Standardized response format (`{"success", "error", "data"}`) for all data operations.
+- **Validation**: Strong application-level validation for all inputs (types, ranges, date formats).
+- **Thread-Safe Design**: Singleton database manager pattern to support concurrent GUI access.
+
+---
+
+## Installation & Usage
+
+### Prerequisites
+- Python 3.9+
+- `pip`
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone [https://github.com/unibo-dtm-se-2025-MoneyMate/artifact.git](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact.git)
+   cd artifact
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+
+### Running the application
+    python -m MoneyMate
+
+### Prerequisites
+- New Users: Click "Register" to create a new account.
+- Admin Access: For academic/testing purposes, an admin account can be registered by setting the role to 'admin' (requires password "12345").
+
 # MoneyMate - Data Layer
 
 A modular, validated, and fully tested Python data layer for a simple personal finance app.  
@@ -72,32 +121,24 @@ Notes:
 <root directory>
 ├── MoneyMate/
 │   ├── __init__.py
-│   ├── __main__.py
-│   └── data_layer/
-│       ├── __init__.py
-│       ├── api.py
-│       ├── categories.py
-│       ├── contacts.py
-│       ├── database.py
-│       ├── expenses.py
-│       ├── logging_config.py
-│       ├── manager.py
-│       ├── transactions.py
-│       ├── usermanager.py
-│       └── validation.py
-└── test/
-    └── data_layer/
-        ├── __init__.py
-        ├── test_api.py
-        ├── test_categories.py
-        ├── test_contacts.py
-        ├── test_database.py
-        ├── test_expenses.py
-        ├── test_logging.py
-        ├── test_manager.py
-        ├── test_transactions.py
-        ├── test_usermanager.py
-        └── test_validation.py
+│   ├── __main__.py           # Entry point for the application
+│   ├── gui/                  # Graphical User Interface
+│   │   ├── app.py            # Main GUI application controller
+│   │   ├── charts_frame.py   # Dashboard with Matplotlib visualizations
+│   │   ├── expenses_frame.py # Expense CRUD interface
+│   │   ├── login_frame.py    # Authentication screens
+│   │   └── ... (other frames for contacts, transactions, categories)
+│   └── data_layer/           # Backend Logic
+│       ├── api.py            # Unified API facade used by GUI
+│       ├── database.py       # SQLite connection and schema management
+│       ├── manager.py        # Central orchestrator
+│       ├── usermanager.py    # Auth and user management
+│       └── ... (modules for expenses, contacts, transactions)
+├── test/                     # Automated Tests
+│   ├── data_layer/           # Backend unit/integration tests
+│   └── gui/                  # GUI unit tests (mocked)
+├── requirements.txt          # Runtime dependencies
+└── README.md
 ```
 
 ---
@@ -348,7 +389,9 @@ Run:
 ```bash
 pytest test/data_layer/
 ```
-
+```bash
+pytest test/gui/
+```
 ---
 
 ## Software Engineering Principles Applied
