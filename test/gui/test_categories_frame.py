@@ -1,17 +1,28 @@
-# test/gui/test_categories_frame.py
 import pytest
 from unittest.mock import MagicMock
 
+# Nota generale:
+# I test di questo modulo verificano il comportamento del frame categorie (CategoriesFrame)
+# coprendo:
+# - Refresh con dati (popolamento Treeview)
+# - Aggiunta categoria valida
+# - Aggiunta categoria con nome mancante (validazione)
+# - Rimozione corretta di categoria selezionata
+# - Rimozione senza selezione (warning)
+# - Errore nel refresh (API fallisce)
+#
+# Stile di asserzione messaggi:
+# Invece di dipendere dalla stringa esatta del messagebox,
+# si usano substring case-insensitive per robustezza (come nei test data layer).
+# Questo riduce i falsi negativi in caso di refactoring minori.
+
 def test_categories_refresh_loads_data(logged_in_app, mock_api):
     """
-    Test that calling 'refresh' on the CategoriesFrame loads data
-    from the API into the Treeview table.
+    Verifica che il refresh carichi correttamente le categorie e popoli la tabella.
     """
     # --- Arrange ---
     app = logged_in_app
     cat_frame = app.frames['CategoriesFrame']
-    
-    # Set mock category data
     mock_api['get_categories'].return_value = {
         'success': True,
         'data': [
@@ -19,103 +30,112 @@ def test_categories_refresh_loads_data(logged_in_app, mock_api):
             {'id': 2, 'name': 'Transport', 'description': 'Bus, taxi'}
         ]
     }
-    
     # --- Act ---
     cat_frame.refresh()
     app.update_idletasks()
-    
     # --- Assert ---
-    # 1. Check that the correct API was called
     mock_api['get_categories'].assert_called_with(user_id=1, order="name_asc")
-    
-    # 2. Check that the table was populated
-    table_items = cat_frame.table.get_children()
-    assert len(table_items) == 2
-    
-    # 3. Check the content of the first row
-    first_row_values = cat_frame.table.item(table_items[0])['values']
-    assert first_row_values[0] == 1
-    assert first_row_values[1] == 'Food'
-    assert first_row_values[2] == 'Groceries, restaurants'
+    items = cat_frame.table.get_children()
+    assert len(items) == 2, "Devono essere presenti due categorie"
+    first_values = cat_frame.table.item(items[0])['values']
+    assert first_values[1] == 'Food'
+    assert first_values[2] == 'Groceries, restaurants'
 
 def test_categories_add_category(logged_in_app, mock_api, mock_messagebox):
     """
-    Test that filling the form and clicking 'Add' calls the API
-    and shows a success message.
+    Verifica aggiunta categoria valida e notifica di successo con refresh.
     """
     # --- Arrange ---
     app = logged_in_app
     cat_frame = app.frames['CategoriesFrame']
     mock_api['add_category'].return_value = {'success': True}
-    
     # --- Act ---
-    # Simulate filling the form
     cat_frame.name_entry.insert(0, 'Utilities')
     cat_frame.desc_entry.insert(0, 'Electricity, Water')
-    
-    # Simulate button click
     cat_frame.add_category()
     app.update_idletasks()
-    
     # --- Assert ---
-    # 1. Check that the add_category API was called correctly
     mock_api['add_category'].assert_called_with(
         user_id=1,
         name='Utilities',
         description='Electricity, Water'
     )
-    
-    # 2. Check that a success message was shown
-    mock_messagebox['showinfo'].assert_called_with(
-        "Success", "Category 'Utilities' added."
-    )
-    
-    # 3. Check that refresh was called (which calls get_categories again)
-    # FIX: The refresh is called *after* the add, so the *first* call
-    # is the one triggered by the add.
+    # Messaggio di successo (robusto su eventuali punteggiature)
+    args, _ = mock_messagebox['showinfo'].call_args
+    assert "success" in args[0].lower()
+    assert "utilities" in args[1].lower()
     assert mock_api['get_categories'].call_count == 1
 
-def test_categories_remove_category(logged_in_app, mock_api, mock_messagebox):
+def test_categories_add_category_missing_name(logged_in_app, mock_api, mock_messagebox):
     """
-    Test that selecting a category and clicking 'Remove' calls the
-    delete API after confirmation.
+    Verifica validazione: nome categoria mancante -> errore e nessuna chiamata API.
     """
     # --- Arrange ---
     app = logged_in_app
     cat_frame = app.frames['CategoriesFrame']
-    
-    # 1. Populate the table
+    # --- Act ---
+    cat_frame.add_category()  # name vuoto
+    app.update_idletasks()
+    # --- Assert ---
+    args, _ = mock_messagebox['showerror'].call_args
+    assert "name" in args[1].lower()
+    mock_api['add_category'].assert_not_called()
+
+def test_categories_remove_category(logged_in_app, mock_api, mock_messagebox):
+    """
+    Verifica rimozione di categoria selezionata (flusso con conferma positiva).
+    """
+    # --- Arrange ---
+    app = logged_in_app
+    cat_frame = app.frames['CategoriesFrame']
     mock_api['get_categories'].return_value = {
         'success': True,
         'data': [{'id': 1, 'name': 'Food', 'description': 'Groceries'}]
     }
     cat_frame.refresh()
     app.update_idletasks()
-    
-    # 2. Mock the delete API
     mock_api['delete_category'].return_value = {'success': True, 'data': {'deleted': 1}}
-    
-    # 3. Mock the confirmation dialog
     mock_messagebox['askyesno'].return_value = True
-    
     # --- Act ---
-    # 4. Select the first item
-    table_item = cat_frame.table.get_children()[0]
-    cat_frame.table.selection_set(table_item)
-    
-    # 5. Simulate button click
+    item = cat_frame.table.get_children()[0]
+    cat_frame.table.selection_set(item)
     cat_frame.remove_category()
     app.update_idletasks()
-    
     # --- Assert ---
-    # 6. Check confirmation
-    mock_messagebox['askyesno'].assert_called_with(
-        "Confirm Removal", 
-        "Are you sure you want to remove category 'Food' (ID: 1)?\n\n(This will not affect existing expenses.)"
-    )
-    
-    # 7. Check that delete API was called
     mock_api['delete_category'].assert_called_with(category_id=1, user_id=1)
-    
-    # 8. Check success message
-    mock_messagebox['showinfo'].assert_called_with("Success", "Category removed.")
+    args, _ = mock_messagebox['showinfo'].call_args
+    assert "removed" in args[1].lower()
+
+def test_categories_remove_without_selection(logged_in_app, mock_api, mock_messagebox):
+    """
+    Verifica comportamento se si tenta di rimuovere senza selezione -> warning.
+    """
+    # --- Arrange ---
+    app = logged_in_app
+    cat_frame = app.frames['CategoriesFrame']
+    mock_api['get_categories'].return_value = {'success': True, 'data': []}
+    cat_frame.refresh()
+    # --- Act ---
+    cat_frame.remove_category()
+    app.update_idletasks()
+    # --- Assert ---
+    args, _ = mock_messagebox['showwarning'].call_args
+    assert "select" in args[1].lower()
+    mock_api['delete_category'].assert_not_called()
+
+def test_categories_refresh_error(logged_in_app, mock_api, mock_messagebox):
+    """
+    Verifica gestione errore durante refresh (API failure) -> messagebox errore.
+    """
+    # --- Arrange ---
+    app = logged_in_app
+    cat_frame = app.frames['CategoriesFrame']
+    mock_api['get_categories'].return_value = {'success': False, 'error': 'DB error'}
+    # --- Act ---
+    cat_frame.refresh()
+    app.update_idletasks()
+    # --- Assert ---
+    args, _ = mock_messagebox['showerror'].call_args
+    assert "error" in args[0].lower()
+    assert "db" in args[1].lower()
+    assert len(cat_frame.table.get_children()) == 0

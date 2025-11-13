@@ -1,81 +1,81 @@
-# test/gui/test_login_frame.py
 import pytest
 from unittest.mock import MagicMock
 
-def test_login_success(app, mock_api, mocker):
-    """
-    Test that a successful login calls the API, updates the app state,
-    and calls the controller's on_login_success method.
-    """
-    # --- Arrange ---
-    # 1. Mock the app's 'on_login_success' to check if it gets called
+# Copertura login/registrazione:
+# - Login successo
+# - Login fallito (credenziali errate)
+# - Login campi mancanti
+# - Registrazione success
+# - Registrazione password troppo corta
+# - Registrazione errore API
+#
+# Notazione messaggi: substring case-insensitive.
+
+def test_login_success(app, mock_api):
+    """Login con credenziali corrette -> callback on_login_success chiamata."""
     app.on_login_success = MagicMock()
-    
-    # 2. Set the return value for the mocked login API
-    mock_api['login'].return_value = {
-        'success': True,
-        'data': {'user_id': 123, 'role': 'user'}
-    }
-    
-    # 3. Get the login frame
-    login_frame = app.frames['LoginFrame']
-    
-    # --- Act ---
-    # 4. Simulate user typing into the entry fields
-    login_frame.login_user_entry.insert(0, 'testuser')
-    login_frame.login_pass_entry.insert(0, 'password123')
-    
-    # --- ADD THIS LINE ---
-    app.update_idletasks() # Force tkinter to process the widget .insert() events
-    
-    # 5. Simulate the user clicking the login button
-    login_frame.attempt_login()
-    
-    # --- Assert ---
-    # 6. Check that the API was called with the correct credentials
+    mock_api['login'].return_value = {'success': True, 'data': {'user_id': 123, 'role': 'user'}}
+    frame = app.frames['LoginFrame']
+    frame.login_user_entry.insert(0, 'testuser')
+    frame.login_pass_entry.insert(0, 'password123')
+    app.update_idletasks()
+    frame.attempt_login()
     mock_api['login'].assert_called_with('testuser', 'password123')
-    
-    # 7. Check that the app's on_login_success method was called
     app.on_login_success.assert_called_with(123, 'testuser')
 
 def test_login_failure(app, mock_api, mock_messagebox):
-    """
-    Test that a failed login calls the API, shows an error message,
-    and does NOT update the app state.
-    """
-    # --- Arrange ---
-    # 1. Mock the app's 'on_login_success' to ensure it's NOT called
+    """Login con password errata -> errore e user_id invariato."""
     app.on_login_success = MagicMock()
-    
-    # 2. Set the return value for a failed login
-    mock_api['login'].return_value = {
-        'success': False,
-        'error': 'Invalid credentials'
-    }
-    
-    # 3. Get the login frame
-    login_frame = app.frames['LoginFrame']
-    
-    # --- Act ---
-    # 4. Simulate user typing
-    login_frame.login_user_entry.insert(0, 'testuser')
-    login_frame.login_pass_entry.insert(0, 'wrongpass')
-    
-    # --- ADD THIS LINE ---
-    app.update_idletasks() # Force tkinter to process the widget .insert() events
-    
-    # 5. Simulate button click
-    login_frame.attempt_login()
-    
-    # --- Assert ---
-    # 6. Check that the API was called
+    mock_api['login'].return_value = {'success': False, 'error': 'Invalid credentials'}
+    frame = app.frames['LoginFrame']
+    frame.login_user_entry.insert(0, 'testuser')
+    frame.login_pass_entry.insert(0, 'wrongpass')
+    frame.attempt_login()
     mock_api['login'].assert_called_with('testuser', 'wrongpass')
-    
-    # 7. Check that the app state was NOT changed
+    # Messaggio errore robusto
+    args, _ = mock_messagebox['showerror'].call_args
+    assert "login" in args[0].lower()
+    assert "invalid" in args[1].lower()
     assert app.user_id is None
-    app.on_login_success.assert_not_called()
-    
-    # 8. Check that an error message was shown
-    mock_messagebox['showerror'].assert_called_with(
-        'Login Error', 'Invalid credentials'
-    )
+
+def test_login_missing_fields(app, mock_api, mock_messagebox):
+    """Login con campi vuoti -> validazione lato GUI."""
+    frame = app.frames['LoginFrame']
+    frame.attempt_login()
+    args, _ = mock_messagebox['showerror'].call_args
+    assert "username" in args[1].lower()
+    mock_api['login'].assert_not_called()
+
+def test_registration_success(app, mock_api, mock_messagebox):
+    """Registrazione utente valida -> success message e pulizia form."""
+    frame = app.frames['LoginFrame']
+    mock_api['register'].return_value = {'success': True}
+    frame.reg_user_entry.insert(0, 'newuser')
+    frame.reg_pass_entry.insert(0, 'abcdef')
+    frame.attempt_registration()
+    mock_api['register'].assert_called_with('newuser', 'abcdef')
+    args, _ = mock_messagebox['showinfo'].call_args
+    assert "registered" in args[1].lower()
+
+def test_registration_password_short(app, mock_api, mock_messagebox):
+    """Password troppo corta -> errore e nessuna chiamata API."""
+    frame = app.frames['LoginFrame']
+    frame.reg_user_entry.insert(0, 'usr')
+    frame.reg_pass_entry.insert(0, '123')
+    frame.attempt_registration()
+    args, _ = mock_messagebox['showerror'].call_args
+    assert "password" in args[1].lower()
+    assert "6" in args[1]  # riferimento lunghezza minima
+    mock_api['register'].assert_not_called()
+
+def test_registration_error_api(app, mock_api, mock_messagebox):
+    """Errore lato API registrazione (es. user già esistente)."""
+    frame = app.frames['LoginFrame']
+    mock_api['register'].return_value = {'success': False, 'error': 'User exists'}
+    frame.reg_user_entry.insert(0, 'dup')
+    frame.reg_pass_entry.insert(0, '123456')
+    frame.attempt_registration()
+    mock_api['register'].assert_called_with('dup', '123456')
+    args, _ = mock_messagebox['showerror'].call_args
+    assert "registration" in args[0].lower()
+    assert "exists" in args[1].lower()

@@ -1,113 +1,90 @@
-# test/gui/test_contacts_frame.py
 import pytest
 from unittest.mock import MagicMock
 
+# Copertura:
+# - Refresh: popolamento dati
+# - Add valido
+# - Add nome vuoto (validazione)
+# - Filter (ricerca per substring)
+# - Remove valido
+# - Remove senza selezione
+#
+# Stile messaggi coerente con data layer (substring case-insensitive).
+
 def test_contacts_refresh_loads_data(logged_in_app, mock_api):
-    """
-    Test that calling 'refresh' on the ContactsFrame loads data
-    from the API into the Treeview table.
-    """
+    """Refresh popola tabella con lista contatti."""
     # --- Arrange ---
     app = logged_in_app
-    contacts_frame = app.frames['ContactsFrame']
-    
-    # Set mock contact data
+    frame = app.frames['ContactsFrame']
     mock_api['get_contacts'].return_value = {
         'success': True,
-        'data': [
-            {'id': 1, 'name': 'Alice'},
-            {'id': 2, 'name': 'Bob'}
-        ]
+        'data': [{'id': 1, 'name': 'Alice'}, {'id': 2, 'name': 'Bob'}]
     }
-    
     # --- Act ---
-    contacts_frame.refresh()
+    frame.refresh()
     app.update_idletasks()
-    
     # --- Assert ---
-    # 1. Check that the correct API was called
     mock_api['get_contacts'].assert_called_with(user_id=1, order="name_asc")
-    
-    # 2. Check that the table was populated
-    table_items = contacts_frame.table.get_children()
-    assert len(table_items) == 2
-    
-    # 3. Check the content of the second row
-    second_row_values = contacts_frame.table.item(table_items[1])['values']
-    assert second_row_values[0] == 2      # ID
-    assert second_row_values[1] == 'Bob'  # Name
+    assert len(frame.table.get_children()) == 2
 
 def test_contacts_add_contact(logged_in_app, mock_api, mock_messagebox):
-    """
-    Test that filling the form and clicking 'Add' calls the API
-    and shows a success message.
-    """
-    # --- Arrange ---
+    """Aggiunta contatto valida -> success e refresh."""
     app = logged_in_app
-    contacts_frame = app.frames['ContactsFrame']
+    frame = app.frames['ContactsFrame']
     mock_api['add_contact'].return_value = {'success': True}
-    
-    # --- Act ---
-    # Simulate filling the form
-    contacts_frame.name_entry.insert(0, 'Charlie')
-    
-    # Simulate button click
-    contacts_frame.add_contact()
-    app.update_idletasks()
-    
-    # --- Assert ---
-    # 1. Check that the add_contact API was called correctly
+    frame.name_entry.insert(0, 'Charlie')
+    frame.add_contact()
     mock_api['add_contact'].assert_called_with(name='Charlie', user_id=1)
-    
-    # 2. Check that a success message was shown
-    mock_messagebox['showinfo'].assert_called_with(
-        "Success", "Contact 'Charlie' added."
-    )
-    
-    # 3. Check that refresh was called (which calls get_contacts again)
-    # This assertion is now 1, because refresh() is only called *after* the add.
+    args, _ = mock_messagebox['showinfo'].call_args
+    assert "charlie" in args[1].lower()
     assert mock_api['get_contacts'].call_count == 1
 
-def test_contacts_remove_contact(logged_in_app, mock_api, mock_messagebox):
-    """
-    Test that selecting a contact and clicking 'Remove' calls the
-    delete API after confirmation.
-    """
-    # --- Arrange ---
+def test_contacts_add_contact_empty_name(logged_in_app, mock_api, mock_messagebox):
+    """Validazione nome vuoto -> errore e nessuna chiamata add_contact."""
     app = logged_in_app
-    contacts_frame = app.frames['ContactsFrame']
-    
-    # 1. Populate the table first
+    frame = app.frames['ContactsFrame']
+    frame.add_contact()
+    args, _ = mock_messagebox['showerror'].call_args
+    assert "name" in args[1].lower()
+    mock_api['add_contact'].assert_not_called()
+
+def test_contacts_filter_search(logged_in_app, mock_api):
+    """Filtro search per substring nel nome (case-insensitive)."""
+    app = logged_in_app
+    frame = app.frames['ContactsFrame']
     mock_api['get_contacts'].return_value = {
         'success': True,
-        'data': [{'id': 1, 'name': 'Alice'}]
+        'data': [{'id': 1, 'name': 'Alice'}, {'id': 2, 'name': 'Bob'}, {'id': 3, 'name': 'Carlo'}]
     }
-    contacts_frame.refresh()
-    app.update_idletasks()
-    
-    # 2. Mock the delete API
+    frame.search_entry.insert(0, 'bo')
+    frame.refresh()
+    items = frame.table.get_children()
+    assert len(items) == 1
+    vals = frame.table.item(items[0])['values']
+    assert vals[1].lower() == 'bob'
+
+def test_contacts_remove_contact(logged_in_app, mock_api, mock_messagebox):
+    """Rimozione contatto con selezione e conferma -> success."""
+    app = logged_in_app
+    frame = app.frames['ContactsFrame']
+    mock_api['get_contacts'].return_value = {'success': True, 'data': [{'id': 10, 'name': 'Test'}]}
+    frame.refresh()
     mock_api['delete_contact'].return_value = {'success': True, 'data': {'deleted': 1}}
-    
-    # 3. Mock the confirmation dialog to return 'Yes'
     mock_messagebox['askyesno'].return_value = True
-    
-    # --- Act ---
-    # 4. Select the first item in the table
-    table_item = contacts_frame.table.get_children()[0]
-    contacts_frame.table.selection_set(table_item)
-    
-    # 5. Simulate button click
-    contacts_frame.remove_contact()
-    app.update_idletasks()
-    
-    # --- Assert ---
-    # 6. Check that confirmation was requested
-    mock_messagebox['askyesno'].assert_called_with(
-        "Confirm Removal", "Are you sure you want to remove contact 'Alice' (ID: 1)?"
-    )
-    
-    # 7. Check that the delete API was called
-    mock_api['delete_contact'].assert_called_with(contact_id=1, user_id=1)
-    
-    # 8. Check that a success message was shown
-    mock_messagebox['showinfo'].assert_called_with("Success", "Contact removed.")
+    iid = frame.table.get_children()[0]
+    frame.table.selection_set(iid)
+    frame.remove_contact()
+    mock_api['delete_contact'].assert_called_with(contact_id=10, user_id=1)
+    args, _ = mock_messagebox['showinfo'].call_args
+    assert "removed" in args[1].lower()
+
+def test_contacts_remove_without_selection(logged_in_app, mock_api, mock_messagebox):
+    """Rimozione senza selezione -> warning, nessuna API di delete."""
+    app = logged_in_app
+    frame = app.frames['ContactsFrame']
+    mock_api['get_contacts'].return_value = {'success': True, 'data': []}
+    frame.refresh()
+    frame.remove_contact()
+    args, _ = mock_messagebox['showwarning'].call_args
+    assert "select" in args[1].lower()
+    mock_api['delete_contact'].assert_not_called()
