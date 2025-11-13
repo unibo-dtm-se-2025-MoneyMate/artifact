@@ -119,26 +119,77 @@ Notes:
 
 ```
 <root directory>
-├── MoneyMate/
+├── .github/
+│   └── workflows/                   
+├── MoneyMate/                        # Main Python package
 │   ├── __init__.py
-│   ├── __main__.py           # Entry point for the application
-│   ├── gui/                  # Graphical User Interface
-│   │   ├── app.py            # Main GUI application controller
-│   │   ├── charts_frame.py   # Dashboard with Matplotlib visualizations
-│   │   ├── expenses_frame.py # Expense CRUD interface
-│   │   ├── login_frame.py    # Authentication screens
-│   │   └── ... (other frames for contacts, transactions, categories)
-│   └── data_layer/           # Backend Logic
-│       ├── api.py            # Unified API facade used by GUI
-│       ├── database.py       # SQLite connection and schema management
-│       ├── manager.py        # Central orchestrator
-│       ├── usermanager.py    # Auth and user management
-│       └── ... (modules for expenses, contacts, transactions)
-├── test/                     # Automated Tests
-│   ├── data_layer/           # Backend unit/integration tests
-│   └── gui/                  # GUI unit tests (mocked)
-├── requirements.txt          # Runtime dependencies
-└── README.md
+│   ├── __main__.py                  
+│   ├── data_layer/                   # Backend (DB, managers, validation, API)
+│   │   ├── __init__.py
+│   │   ├── api.py                    # Thread-safe facade; returns {"success","error","data"}
+│   │   ├── categories.py
+│   │   ├── contacts.py
+│   │   ├── database.py               # SQLite connection + schema initialization
+│   │   ├── expenses.py
+│   │   ├── logging_config.py
+│   │   ├── manager.py                # DatabaseManager singleton, orchestrates managers
+│   │   ├── transactions.py
+│   │   ├── usermanager.py            # Auth + password hashing + audit logging
+│   │   └── validation.py
+│   └── gui/                          # Tkinter GUI (frames/views)
+│       ├── __init__.py
+│       ├── app.py                    # GUI controller and frame routing
+│       ├── categories_frame.py
+│       ├── charts_frame.py           # Matplotlib charts/dashboard
+│       ├── contacts_frame.py
+│       ├── expenses_frame.py
+│       ├── login_frame.py
+│       └── transactions_frame.py
+├── scripts/
+│   └── init_db.py                    # Initialize DB using SQL schema(s)
+├── sql/
+│   └── auth_schema.sql               # Auth/users schema (DDL)
+├── test/                            
+│   ├── __init__.py
+│   ├── data_layer/                   # Backend unit/integration tests
+│   │   ├── __init__.py
+│   │   ├── test_api.py
+│   │   ├── test_categories.py
+│   │   ├── test_contacts.py
+│   │   ├── test_database.py
+│   │   ├── test_expenses.py
+│   │   ├── test_logging.py
+│   │   ├── test_manager.py
+│   │   ├── test_transactions.py
+│   │   ├── test_usermanager.py
+│   │   └── test_validation.py
+│   ├── gui/                          # GUI tests (Tkinter/matplotlib fakes, fixtures)
+│   │   ├── __init__.py
+│   │   ├── conftest.py
+│   │   ├── test_categories_frame.py
+│   │   ├── test_charts_frame.py
+│   │   ├── test_contacts_frame.py
+│   │   ├── test_expenses_frame.py
+│   │   ├── test_login_frame.py
+│   │   └── test_transactions_frame.py
+│   └── unit/
+│       └── test_data_layer.py
+├── .gitignore
+├── .python-version                  
+├── CHANGELOG.md
+├── LICENSE
+├── MANIFEST.in
+├── README.md                       
+├── package-lock.json
+├── package.json                      
+├── populate_db.py                    # Demo data population script (used in README)
+├── pyproject.toml                    
+├── pytest.ini                       
+├── release.config.js
+├── renovate.json
+├── requirements-dev.txt              
+├── requirements.txt                 
+└── setup.py
 ```
 
 ---
