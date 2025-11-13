@@ -1,10 +1,9 @@
-# Packaging / distribuzione
+# Packaging / distribution
 build>=0.6.0
 twine>=3.4.2
 
-# Testing
+# Testing (dev-only)
 pytest
 
-
-# Inclusione dipendenze runtime
--r requirements.txtpytest
+# Include runtime dependencies (must be on its own line)
+-r requirements.txt
