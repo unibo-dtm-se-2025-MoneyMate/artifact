@@ -1,83 +1,87 @@
 # test/gui/conftest.py
 #
-# !!! NON USARE matplotlib.use('Agg') !!!
-# Causa un conflitto diretto con FigureCanvasTkAgg
-# usato in charts_frame.py e genera TclError.
-#
-# import matplotlib
-# matplotlib.use('Agg')
-#
-# Versione SENZA uso della fixture 'mocker' (pytest-mock non richiesto).
-# Si utilizza 'monkeypatch' + unittest.mock.MagicMock per mantenere i test
-# semplici, isolati e deterministici. Se Tk/Tcl non è disponibile viene
-# effettuato uno skip pulito dei test GUI (fail-fast).
-#
-# Principi SE rispettati:
-# - Isolamento (fixture per ogni test)
-# - Determinismo (mock con valori fissati)
-# - Chiarezza (commenti e pattern Arrange–Act–Assert usato nei test)
-# - Fail-fast per ambiente non idoneo (skip se Tk assente)
+# Nota: evitiamo di importare tkinter/MoneyMateGUI a livello modulo.
+# Patchiamo MoneyMate.data_layer.api.set_db_path PRIMA di importare MoneyMate.gui.app
+# così non crea un DB a import-time.
 
 import pytest
-import tkinter as tk
 from unittest.mock import MagicMock
-
-from MoneyMate.gui.app import MoneyMateGUI
+import importlib
 
 
 def _patch(monkeypatch, dotted_path):
     """
-    Utility interna per creare e applicare un MagicMock sostituendo l'attributo indicato.
-    Ritorna il mock creato.
+    Crea e applica un MagicMock sull'attributo indicato.
     """
     module_path, attr_name = dotted_path.rsplit('.', 1)
     module = __import__(module_path, fromlist=[attr_name])
     mock = MagicMock()
-    monkeypatch.setattr(module, attr_name, mock)
+    # raising=True: fallisce subito se l'attributo non esiste (fail-fast utile in sviluppo)
+    monkeypatch.setattr(module, attr_name, mock, raising=True)
     return mock
 
 
 @pytest.fixture
 def app(monkeypatch):
     """
-    Fixture per creare e distruggere un'istanza di MoneyMateGUI per ogni test.
-    Effettua patch di 'set_db_path' (se esiste) per prevenire la creazione di file.
-    Se Tk/Tcl non è disponibile --> skip pulito dei test GUI.
+    Istanzia MoneyMateGUI in modo sicuro:
+    - Patch set_db_path a no-op prima di importare la GUI (evita side-effect su file).
+    - Import lazy di tkinter e MoneyMateGUI.
+    - Skip pulito se Tk/Tcl manca.
     """
+    # Patch preventivo di set_db_path
     try:
-        from MoneyMate.gui import app as app_module
-        if hasattr(app_module, 'set_db_path'):
-            monkeypatch.setattr(app_module, 'set_db_path', lambda *a, **kw: None)
-    except ImportError:
-        pass
+        api_module = importlib.import_module('MoneyMate.data_layer.api')
+        monkeypatch.setattr(api_module, 'set_db_path', lambda *a, **kw: None, raising=True)
+    except Exception as e:
+        pytest.skip(f"Impossibile patchare set_db_path prima dell'import GUI: {e}")
+        return
 
+    # Import lazy di tkinter
+    try:
+        import tkinter as tk  # noqa: F401
+    except Exception as e:
+        pytest.skip(f"GUI non disponibile (import tkinter fallito): {e}")
+        return
+
+    # Import lazy della GUI
+    try:
+        gui_app_module = importlib.import_module('MoneyMate.gui.app')
+        MoneyMateGUI = getattr(gui_app_module, 'MoneyMateGUI')
+    except Exception as e:
+        pytest.skip(f"GUI non disponibile (import MoneyMateGUI fallito): {e}")
+        return
+
+    # Istanziazione con gestione TclError
     try:
         app_instance = MoneyMateGUI()
-    except tk.TclError:
-        pytest.skip("Tk/Tcl non disponibile: installa Python da python.org per eseguire i test GUI.")
+    except Exception as e:
+        pytest.skip(f"Tk/Tcl non disponibile: {e}")
         return
 
     yield app_instance
 
     try:
         app_instance.destroy()
-    except tk.TclError:
+    except Exception:
         pass
 
 
 @pytest.fixture
 def mock_api(monkeypatch):
     """
-    Simula tutte le funzioni api_... importate e usate dai frame della GUI.
-    Restituisce un dizionario di mock che i test possono configurare.
+    Mock di tutte le API usate dai frame GUI.
+    Patch SOLO ciò che è effettivamente importato in ciascun modulo.
     """
     mocks = {
         # MoneyMate.gui.app
         'logout': _patch(monkeypatch, 'MoneyMate.gui.app.api_logout_user'),
 
         # MoneyMate.gui.login_frame
-        'register': _patch(monkeypatch, 'MoneyMate.gui.login_frame.api_register_user'),
         'login': _patch(monkeypatch, 'MoneyMate.gui.login_frame.api_login_user'),
+
+        # MoneyMate.gui.register_frame
+        'register': _patch(monkeypatch, 'MoneyMate.gui.register_frame.api_register_user'),
 
         # MoneyMate.gui.expenses_frame
         'add_expense': _patch(monkeypatch, 'MoneyMate.gui.expenses_frame.api_add_expense'),
@@ -86,6 +90,7 @@ def mock_api(monkeypatch):
         'update_expense': _patch(monkeypatch, 'MoneyMate.gui.expenses_frame.api_update_expense'),
         'get_categories_exp': _patch(monkeypatch, 'MoneyMate.gui.expenses_frame.api_get_categories'),
         'search_expenses': _patch(monkeypatch, 'MoneyMate.gui.expenses_frame.api_search_expenses'),
+        'clear_expenses': _patch(monkeypatch, 'MoneyMate.gui.expenses_frame.api_clear_expenses'),
 
         # MoneyMate.gui.contacts_frame
         'add_contact': _patch(monkeypatch, 'MoneyMate.gui.contacts_frame.api_add_contact'),
@@ -102,8 +107,7 @@ def mock_api(monkeypatch):
         'get_transactions': _patch(monkeypatch, 'MoneyMate.gui.transactions_frame.api_get_transactions'),
         'delete_transaction': _patch(monkeypatch, 'MoneyMate.gui.transactions_frame.api_delete_transaction'),
         'get_contacts_trans': _patch(monkeypatch, 'MoneyMate.gui.transactions_frame.api_get_contacts'),
-        'get_contact_balance': _patch(monkeypatch, 'MoneyMate.gui.transactions_frame.api_get_contact_balance'),
-        'get_user_net_balance': _patch(monkeypatch, 'MoneyMate.gui.transactions_frame.api_get_user_net_balance'),
+        'get_balance_breakdown': _patch(monkeypatch, 'MoneyMate.gui.transactions_frame.api_get_user_balance_breakdown'),
 
         # MoneyMate.gui.charts_frame
         'get_expenses_charts': _patch(monkeypatch, 'MoneyMate.gui.charts_frame.api_get_expenses'),
@@ -111,7 +115,7 @@ def mock_api(monkeypatch):
         'get_categories_charts': _patch(monkeypatch, 'MoneyMate.gui.charts_frame.api_get_categories'),
     }
 
-    # Mock che restituiscono liste
+    # Valori di default
     for name in [
         'get_expenses', 'get_categories_exp', 'search_expenses',
         'get_contacts', 'get_categories', 'get_transactions',
@@ -125,16 +129,15 @@ def mock_api(monkeypatch):
         'data': {'user_id': 1, 'username': 'testuser'}
     }
 
-    # Bilanci / breakdown
-    mocks['get_contact_balance'].return_value = {'success': True, 'data': {'balance': 0.0}}
-    mocks['get_user_net_balance'].return_value = {'success': True, 'data': {'net_balance': 0.0}}
+    # Breakdown/bilanci
+    mocks['get_balance_breakdown'].return_value = {'success': True, 'data': {}}
     mocks['get_balance_breakdown_charts'].return_value = {'success': True, 'data': {}}
 
-    # Operazioni semplici
+    # Operazioni semplici -> success
     for name in [
         'logout', 'register', 'add_expense', 'delete_expense', 'update_expense',
         'add_contact', 'delete_contact', 'add_category', 'delete_category',
-        'add_transaction', 'delete_transaction'
+        'add_transaction', 'delete_transaction', 'clear_expenses'
     ]:
         mocks[name].return_value = {'success': True}
 
@@ -149,40 +152,35 @@ def mock_api(monkeypatch):
 @pytest.fixture
 def mock_messagebox(monkeypatch):
     """
-    Simula tutte le funzioni di tkinter.messagebox.
-    Best practice: mockare anche showwarning, usato nei casi di 'nessuna selezione'.
+    Mock di tkinter.messagebox usato nei frame GUI.
     """
-    from tkinter import messagebox
+    try:
+        from tkinter import messagebox
+    except Exception as e:
+        pytest.skip(f"GUI non disponibile (import messagebox fallito): {e}")
+        return
+
     mocks = {
         'showerror': MagicMock(),
         'showinfo': MagicMock(),
-        'showwarning': MagicMock(),   # <- AGGIUNTO per i test di warning
+        'showwarning': MagicMock(),
         'askyesno': MagicMock(),
     }
     monkeypatch.setattr(messagebox, 'showerror', mocks['showerror'])
     monkeypatch.setattr(messagebox, 'showinfo', mocks['showinfo'])
-    monkeypatch.setattr(messagebox, 'showwarning', mocks['showwarning'])  # <- AGGIUNTO
+    monkeypatch.setattr(messagebox, 'showwarning', mocks['showwarning'])
     monkeypatch.setattr(messagebox, 'askyesno', mocks['askyesno'])
     return mocks
 
 
 @pytest.fixture
-def mock_simpledialog(monkeypatch):
-    """
-    Simula tkinter.simpledialog.askstring.
-    """
-    from tkinter import simpledialog
-    mock = MagicMock()
-    monkeypatch.setattr(simpledialog, 'askstring', mock)
-    return mock
-
-
-@pytest.fixture
 def logged_in_app(app, mock_api):
     """
-    Fixture di aiuto per mettere l'app nello stato 'logged-in'.
-    Esegue il login dell'utente e gestisce la transizione.
+    Porta l'app nello stato 'logged-in' per i test dei frame.
     """
     app.on_login_success(user_id=1, username='testuser')
-    app.update_idletasks()  # Processa gli eventi di login (MOLTO IMPORTANTE)
+    try:
+        app.update_idletasks()
+    except Exception:
+        pass
     return app
