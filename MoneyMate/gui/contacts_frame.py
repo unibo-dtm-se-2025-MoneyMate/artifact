@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox
 from MoneyMate.data_layer.api import api_add_contact, api_get_contacts, api_delete_contact
 
 class ContactsFrame(ttk.Frame):
