@@ -2,7 +2,6 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from collections import defaultdict
 import importlib
-from collections import defaultdict
 from datetime import datetime
 
 from MoneyMate.data_layer.api import api_get_expenses, api_get_user_balance_breakdown, api_get_categories
@@ -17,9 +16,6 @@ class ChartsFrame(ttk.Frame):
         # Frame to contain the charts
         self.charts_container = ttk.Frame(self, style='Content.TFrame')
         self.charts_container.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
-
-        # Note: A refresh button is often good, but we refresh on tab switch via show_frame
-        # ttk.Button(self, text="Refresh Charts", command=self.refresh, style='Secondary.TButton').pack(pady=5)
 
     def refresh(self):
         """Generate and display the charts."""
@@ -88,12 +84,10 @@ class ChartsFrame(ttk.Frame):
             plt = importlib.import_module('matplotlib.pyplot')
             mdates = importlib.import_module('matplotlib.dates')
             
-            # --- FONT FIX ---
-            # Set matplotlib styles to match app
-            # Use a 'font stack' to find a compatible sans-serif font
+            # Style settings to match app
             plt.rcParams.update({
                 'font.family': 'sans-serif',
-                'font.sans-serif': ['Arial', 'DejaVu Sans', 'Liberation Sans', 'Helvetica'], # Try Arial first
+                'font.sans-serif': ['Arial', 'DejaVu Sans', 'Liberation Sans', 'Helvetica'],
                 'font.size': 9,
                 'axes.facecolor': BG_COLOR,
                 'axes.edgecolor': GRID_COLOR,
@@ -107,8 +101,6 @@ class ChartsFrame(ttk.Frame):
                 'grid.color': GRID_COLOR,
                 'patch.edgecolor': BG_COLOR
             })
-            # --- END FONT FIX ---
-
         except Exception as e:
             print(f"matplotlib not available: {e}")
             ttk.Label(self.charts_container, text="Charts cannot be displayed (matplotlib missing)").pack(pady=10)
@@ -132,7 +124,6 @@ class ChartsFrame(ttk.Frame):
             if expenses_by_category:
                 labels = list(expenses_by_category.keys())
                 sizes = list(expenses_by_category.values())
-                # Create a color cycle
                 colors = plt.cm.Dark2.colors 
                 ax1.pie(sizes, labels=labels, autopct='%1.1f%%', startangle=90, textprops={'fontsize': 8, 'color': TEXT_COLOR}, colors=colors)
                 ax1.set_title("Expenses by Category", fontsize=12, fontweight='bold')
@@ -148,11 +139,9 @@ class ChartsFrame(ttk.Frame):
         ax2 = axes[0, 1]
         if expenses_data:
             expenses_by_date = defaultdict(float)
-            dates = []
             for exp in expenses_data:
                 try:
                     date_obj = _parse_date(exp.get("date"))
-                    dates.append(date_obj)
                     expenses_by_date[date_obj.date()] += float(exp.get("price", 0)) # Aggregate by day
                 except (ValueError, TypeError, KeyError):
                     continue
@@ -170,7 +159,7 @@ class ChartsFrame(ttk.Frame):
                 ax2.tick_params(axis='x', labelsize=8)
                 ax2.tick_params(axis='y', labelsize=8)
                 ax2.grid(True, linestyle='--', alpha=0.6)
-                ax2.set_facecolor(self.controller.FRAME_COLOR) # White background for chart area
+                ax2.set_facecolor(self.controller.FRAME_COLOR)
             else:
                  ax2.text(0.5, 0.5, 'No valid expenses found', horizontalalignment='center', verticalalignment='center', color=TEXT_COLOR)
                  ax2.set_title("Expense Trend Over Time", fontsize=12, fontweight='bold')
