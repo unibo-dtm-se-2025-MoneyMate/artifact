@@ -27,7 +27,10 @@ def test_expenses_refresh_loads_data(logged_in_app, mock_api):
     app = logged_in_app
     frame = app.frames['ExpensesFrame']
     frame.refresh()
-    mock_api['get_expenses'].assert_called_with(user_id=1)
+    # Verifica robusta: user_id=1 nei kwargs
+    assert mock_api['get_expenses'].called
+    _, kwargs = mock_api['get_expenses'].call_args
+    assert kwargs['user_id'] == 1
     assert len(frame.table.get_children()) == 2
 
 def test_expenses_add_valid(logged_in_app, mock_api, mock_messagebox):
