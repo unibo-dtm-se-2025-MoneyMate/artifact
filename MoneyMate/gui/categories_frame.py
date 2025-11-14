@@ -1,5 +1,5 @@
 import tkinter as tk
-from tkinter import ttk, messagebox, simpledialog
+from tkinter import ttk, messagebox
 from MoneyMate.data_layer.api import api_add_category, api_get_categories, api_delete_category
 
 class CategoriesFrame(ttk.Frame):
@@ -38,18 +38,16 @@ class CategoriesFrame(ttk.Frame):
         table_container = ttk.Frame(bottom_frame)
         table_container.pack(fill=tk.BOTH, expand=True)
         
-        cols = ("id", "name", "description") # <-- Columns updated
+        cols = ("id", "name", "description")
         self.table = ttk.Treeview(table_container, columns=cols, show="headings", selectmode="browse", style='Treeview')
 
         self.table.heading("id", text="ID")
         self.table.heading("name", text="Name")
         self.table.heading("description", text="Description")
-        # --- Removed color and icon headings ---
 
         self.table.column("id", width=50, stretch=tk.NO, anchor=tk.CENTER)
         self.table.column("name", width=150, anchor=tk.W)
         self.table.column("description", width=250, anchor=tk.W)
-        # --- Removed color and icon columns ---
 
         scrollbar = ttk.Scrollbar(table_container, orient=tk.VERTICAL, command=self.table.yview)
         self.table.configure(yscrollcommand=scrollbar.set)
@@ -75,7 +73,6 @@ class CategoriesFrame(ttk.Frame):
         if result["success"]:
             categories = result["data"]
             for cat in categories:
-                # <-- Updated values tuple
                 self.table.insert("", tk.END, values=(
                     cat.get("id", ""),
                     cat.get("name", "N/A"),
@@ -94,14 +91,11 @@ class CategoriesFrame(ttk.Frame):
 
         name = self.name_entry.get().strip()
         desc = self.desc_entry.get().strip()
-        # --- Removed color and icon ---
 
         if not name:
             messagebox.showerror("Error", "Category name is required.")
             return
 
-        # Call the API, passing None for empty optional fields
-        # <-- Updated API call
         result = api_add_category(
             user_id=self.controller.user_id,
             name=name,
@@ -110,7 +104,7 @@ class CategoriesFrame(ttk.Frame):
 
         if result["success"]:
             messagebox.showinfo("Success", f"Category '{name}' added.")
-            self.refresh() # Reload table
+            self.refresh()
         else:
             messagebox.showerror("Error Adding Category", result["error"] or "Could not add category.")
     
@@ -118,7 +112,6 @@ class CategoriesFrame(ttk.Frame):
         """Clears the form fields and deselects from table."""
         self.name_entry.delete(0, tk.END)
         self.desc_entry.delete(0, tk.END)
-        # --- Removed color and icon ---
         self.table.selection_remove(self.table.selection())
 
     def remove_category(self):
@@ -148,6 +141,6 @@ class CategoriesFrame(ttk.Frame):
                      messagebox.showinfo("Success", "Category removed.")
                  else:
                      messagebox.showwarning("Warning", "Category not found or does not belong to the user.")
-                 self.refresh() # Reload table
+                 self.refresh()
             else:
                 messagebox.showerror("Error Removing Category", result["error"] or "Could not remove category.")
