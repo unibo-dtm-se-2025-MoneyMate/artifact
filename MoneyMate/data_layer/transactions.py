@@ -21,6 +21,9 @@ class TransactionsManager:
     """
     Manager class for handling transaction-related database operations.
     Includes CRUD, user/contact checks, and balance computations.
+
+    New: to_user_id can be omitted (None) if contact_id is provided.
+    In that case, we auto-resolve/create a counterparty user for the given contact.
     """
 
     def __init__(self, db_path, contacts_manager: ContactsManager = None, db_manager=None):
@@ -35,6 +38,11 @@ class TransactionsManager:
     # CRUD TRANSACTIONS
     # ---------------------
     def add_transaction(self, from_user_id, to_user_id, type_, amount, date, description="", contact_id=None):
+        """
+        Add a transaction.
+        - If to_user_id is None and contact_id is provided, we create (if needed) and use a counterparty
+          user with username 'contact_{contact_id}'.
+        """
         err = validate_transaction(type_, amount, date)
         if err:
             logger.warning(f"Validation failed for transaction: {err}")
@@ -42,11 +50,22 @@ class TransactionsManager:
 
         if not self._user_exists(from_user_id):
             return self.dict_response(False, "Sender user does not exist")
+
+        # Auto-resolve recipient from contact if to_user_id is None
+        if to_user_id is None:
+            if not contact_id:
+                return self.dict_response(False, "Recipient not specified (select a Contact)")
+            if not (self.contacts_manager and self.contacts_manager.contact_exists(contact_id, from_user_id)):
+                return self.dict_response(False, "Contact does not exist")
+            to_user_id = self._ensure_counterparty_user(contact_id)
+
         if not self._user_exists(to_user_id):
             return self.dict_response(False, "Receiver user does not exist")
         if from_user_id == to_user_id:
             return self.dict_response(False, "Sender and receiver must be different")
-        if contact_id and not self.contacts_manager.contact_exists(contact_id, from_user_id):
+
+        # contact_id (if provided) must belong to sender (already checked above for auto-mode)
+        if contact_id and self.contacts_manager and not self.contacts_manager.contact_exists(contact_id, from_user_id):
             return self.dict_response(False, "Contact does not exist")
 
         try:
@@ -59,7 +78,6 @@ class TransactionsManager:
                     (from_user_id, to_user_id, type_, float(amount), date, description, contact_id)
                 )
                 conn.commit()
-            # Log conforme al test di logging
             logger.info(f"Transaction from user id={from_user_id} to user id={to_user_id} amount={float(amount)}")
             return self.dict_response(True)
         except Exception as e:
@@ -89,7 +107,7 @@ class TransactionsManager:
             fields["date"] = date
         if description is not None:
             fields["description"] = description
-        if contact_id is not None and not self.contacts_manager.contact_exists(contact_id, user_id):
+        if contact_id is not None and self.contacts_manager and not self.contacts_manager.contact_exists(contact_id, user_id):
             return self.dict_response(False, "Contact does not exist")
         if contact_id is not None:
             fields["contact_id"] = contact_id
@@ -119,7 +137,6 @@ class TransactionsManager:
                 cursor.execute("DELETE FROM transactions WHERE id = ? AND from_user_id = ?", (transaction_id, user_id))
                 deleted = cursor.rowcount or 0
                 conn.commit()
-            # Log richiesto dal test
             logger.info(f"Deleted transaction id={transaction_id} by user id={user_id} (deleted={deleted})")
             return self.dict_response(True, data={"deleted": deleted})
         except Exception as e:
@@ -294,3 +311,25 @@ class TransactionsManager:
         except Exception as e:
             logger.error(f"Error checking admin role: {e}")
             return False
+
+    def _ensure_counterparty_user(self, contact_id: int) -> int:
+        """
+        Ensure there is a 'virtual' user backing the given contact.
+        Username format: 'contact_{contact_id}'.
+        Returns the user's id (creates it if needed).
+        """
+        uname = f"contact_{int(contact_id)}"
+        with get_connection(self.db_path) as conn:
+            conn.row_factory = sqlite3.Row
+            cur = conn.cursor()
+            row = cur.execute("SELECT id FROM users WHERE username = ?", (uname,)).fetchone()
+            if row:
+                return int(row["id"])
+            # Create a minimal user row for the counterparty
+            cur.execute(
+                "INSERT INTO users (username, password_hash, role) VALUES (?, ?, 'user')",
+                (uname, "",)
+            )
+            conn.commit()
+            new_id = int(cur.execute("SELECT last_insert_rowid()").fetchone()[0])
+            return new_id
