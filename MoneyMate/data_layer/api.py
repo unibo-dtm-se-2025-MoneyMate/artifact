@@ -2,22 +2,15 @@
 api.py
 Unified API interface for MoneyMate data layer, using DatabaseManager.
 
-This module provides high-level functions to interact with expenses,
-contacts, transactions, and users, wrapping DatabaseManager methods.
-Each function returns a standardized dictionary response.
+High-level API functions wrapping manager methods and returning dict envelopes:
+{success: bool, error: str|None, data: any}
 
-Now supports user-scoped operations for expenses, contacts, and transactions,
-including tracking transactions/credit between users.
-
-Extended:
-- User roles (admin/user): admin can view all transactions
-- Admin registration policy: enforced in UserManager (password '12345')
-- API now forwards 'role' to user registration and 'is_admin' to transactions listing
-- Optional category_id for expenses (backward compatible)
-- Deterministic ordering and optional pagination/filtering for listings
-- Thread-safe DatabaseManager singleton via double-checked locking
-- Update APIs for expenses and transactions
-- Contact balance API for user+contact breakdown
+Features:
+- User registration/login/logout with roles.
+- Expenses, contacts, categories, transactions CRUD.
+- Optional category_id for expenses.
+- Pagination + ordering parameters (passed through if managers support them).
+- Helper APIs: user lookup, list users (if UserManager implements them).
 """
 
 import threading
@@ -30,41 +23,8 @@ logger = get_logger(__name__)
 _db = None
 _db_lock = threading.Lock()
 
-def _new_manager_for_path(db_path):
-    """
-    Create a DatabaseManager handling both signatures:
-    - Preferred: DatabaseManager(db_path)
-    - Fallback:  DatabaseManager() + set_db_path(db_path) if available
-    """
-    # Ensure schema exists before manager instantiation
-    if db_path is not None:
-        try:
-            init_db(db_path)
-        except Exception as e:
-            logger.warning(f"init_db({db_path}) failed (will continue): {e}")
-
-    try:
-        # Preferred signature
-        return DatabaseManager(db_path)
-    except TypeError:
-        # Fallback for legacy signature (no-arg constructor)
-        mgr = DatabaseManager()
-        if db_path is not None:
-            if hasattr(mgr, "set_db_path"):
-                try:
-                    mgr.set_db_path(db_path)
-                except Exception as e:
-                    logger.warning(f"DatabaseManager.set_db_path({db_path}) failed: {e}")
-            elif hasattr(mgr, "db_path"):
-                # Last-resort set and re-init
-                mgr.db_path = db_path
-                try:
-                    init_db(db_path)
-                except Exception as e:
-                    logger.warning(f"init_db after direct db_path set failed: {e}")
-        return mgr
-
 def get_db():
+    """Return the singleton DatabaseManager instance."""
     global _db
     if _db is None:
         with _db_lock:
@@ -73,10 +33,14 @@ def get_db():
                 try:
                     _db = DatabaseManager()
                 except TypeError:
-                    _db = DatabaseManager()  # fallback per costruttori legacy
+                    _db = DatabaseManager()  # legacy fallback
     return _db
 
 def set_db_path(db_path):
+    """
+    Switch the underlying database file used by the singleton manager.
+    Passing None releases the manager (useful for tests or cleanup).
+    """
     global _db
     with _db_lock:
         if db_path is None:
@@ -86,7 +50,7 @@ def set_db_path(db_path):
                     _db.close()
             finally:
                 _db = None
-                gc.collect()  # aiuta Windows a rilasciare handle
+                gc.collect()
         else:
             logger.info(f"Setting DatabaseManager db_path to: {db_path}")
             try:
@@ -94,9 +58,7 @@ def set_db_path(db_path):
                     _db.close()
             finally:
                 _db = None
-            # assicura schema
             init_db(db_path)
-            # crea nuovo manager (compatibile con costruttori legacy)
             try:
                 _db = DatabaseManager(db_path)
             except TypeError:
@@ -104,13 +66,11 @@ def set_db_path(db_path):
                 if hasattr(_db, "set_db_path"):
                     _db.set_db_path(db_path)
 
-# --- UTILITY ---
+# ---------------------------------------------------------------------------
+# UTILITY
+# ---------------------------------------------------------------------------
 
 def api_list_tables():
-    """
-    Restituisce la lista COMPLETA delle tabelle dal livello database.
-    Formato: {success, error, data: [tables]}
-    """
     logger.info("API call: api_list_tables")
     db = get_db()
     res = db_list_tables(getattr(db, "db_path", None))
@@ -122,19 +82,15 @@ def api_list_tables():
         return {"success": True, "error": None, "data": res["tables"]}
     return {"success": False, "error": "Unexpected response from data layer", "data": None}
 
-def api_health(): 
-    """
-    Lightweight health check for GUI integration.
-    Returns: dict {success, error, data: int (schema_version)}
-    """
+def api_health():
     logger.info("API call: api_health")
     from .database import get_schema_version
-
     db = get_db()
-    version_resp = get_schema_version(getattr(db, "db_path", None))
-    return version_resp
+    return get_schema_version(getattr(db, "db_path", None))
 
-# --- USERS API ---
+# ---------------------------------------------------------------------------
+# USERS API
+# ---------------------------------------------------------------------------
 
 def api_register_user(username, password, role="user"):
     logger.info(f"API call: api_register_user (username={username}, role={role})")
@@ -164,7 +120,27 @@ def api_set_user_role(admin_user_id, target_user_id, new_role):
     logger.info(f"API call: api_set_user_role (admin_user_id={admin_user_id}, target_user_id={target_user_id}, new_role={new_role})")
     return get_db().users.set_user_role(admin_user_id, target_user_id, new_role)
 
-# --- CATEGORIES API ---
+def api_get_user_by_username(username):
+    logger.info(f"API call: api_get_user_by_username (raw='{username}')")
+    users_mgr = getattr(get_db(), "users", None)
+    if not users_mgr:
+        return {"success": False, "error": "Users manager not available.", "data": None}
+    if hasattr(users_mgr, "get_user_by_username"):
+        return users_mgr.get_user_by_username(username)
+    return {"success": False, "error": "User lookup method not implemented in underlying manager.", "data": None}
+
+def api_list_users():
+    logger.info("API call: api_list_users")
+    users_mgr = getattr(get_db(), "users", None)
+    if not users_mgr:
+        return {"success": False, "error": "Users manager not available.", "data": None}
+    if hasattr(users_mgr, "list_users"):
+        return users_mgr.list_users()
+    return {"success": False, "error": "list_users not implemented.", "data": None}
+
+# ---------------------------------------------------------------------------
+# CATEGORIES API
+# ---------------------------------------------------------------------------
 
 def api_add_category(user_id, name, description=None, color=None, icon=None):
     logger.info(f"API call: api_add_category (user_id={user_id}, name={name})")
@@ -178,7 +154,9 @@ def api_delete_category(category_id, user_id):
     logger.info(f"API call: api_delete_category (category_id={category_id}, user_id={user_id})")
     return get_db().categories.delete_category(category_id, user_id)
 
-# --- EXPENSES API ---
+# ---------------------------------------------------------------------------
+# EXPENSES API
+# ---------------------------------------------------------------------------
 
 def api_add_expense(title, price, date, category, user_id, category_id=None):
     logger.info(
@@ -210,7 +188,9 @@ def api_clear_expenses(user_id):
     logger.info(f"API call: api_clear_expenses (user_id={user_id})")
     return get_db().expenses.clear_expenses(user_id)
 
-# --- CONTACTS API ---
+# ---------------------------------------------------------------------------
+# CONTACTS API
+# ---------------------------------------------------------------------------
 
 def api_add_contact(name, user_id):
     logger.info(f"API call: api_add_contact (name={name}, user_id={user_id})")
@@ -224,9 +204,23 @@ def api_delete_contact(contact_id, user_id):
     logger.info(f"API call: api_delete_contact (contact_id={contact_id}, user_id={user_id})")
     return get_db().contacts.delete_contact(contact_id, user_id)
 
-# --- TRANSACTIONS API ---
+# ---------------------------------------------------------------------------
+# TRANSACTIONS API
+# ---------------------------------------------------------------------------
 
-def api_add_transaction(from_user_id, to_user_id, type_, amount, date, description="", contact_id=None):
+def api_add_transaction(from_user_id, type_, amount, date, description="", contact_id=None, to_user_id=None):
+    """
+    Add a transaction.
+
+    Parameters:
+      from_user_id (int)    -> sender (logged-in user)
+      type_ (str)           -> 'credit' | 'debit'
+      amount (float)        -> positive amount
+      date (str)            -> YYYY-MM-DD
+      description (str)     -> optional
+      contact_id (int|None) -> labels/resolve counterparty user if to_user_id is None
+      to_user_id (int|None) -> optional; if None and contact_id present, manager will auto-resolve/create.
+    """
     logger.info(
         f"API call: api_add_transaction (from_user_id={from_user_id}, to_user_id={to_user_id}, "
         f"type={type_}, amount={amount}, date={date}, description={description}, contact_id={contact_id})"
@@ -240,9 +234,17 @@ def api_update_transaction(transaction_id, user_id, type_=None, amount=None, dat
     )
     return get_db().transactions.update_transaction(transaction_id, user_id, type_=type_, amount=amount, date=date, description=description, contact_id=contact_id)
 
-def api_get_transactions(user_id, as_sender=True, is_admin=False, order="date_desc", limit=None, offset=None, date_from=None, date_to=None, contact_id=None):
-    logger.info(f"API call: api_get_transactions (user_id={user_id}, as_sender={as_sender}, is_admin={is_admin}, order={order}, limit={limit}, offset={offset}, date_from={date_from}, date_to={date_to}, contact_id={contact_id})")
-    return get_db().transactions.get_transactions(user_id, as_sender=as_sender, is_admin=is_admin, order=order, limit=limit, offset=offset, date_from=date_from, date_to=date_to, contact_id=contact_id)
+def api_get_transactions(user_id, as_sender=True, is_admin=False, order="date_desc",
+                         limit=None, offset=None, date_from=None, date_to=None, contact_id=None):
+    logger.info(
+        "API call: api_get_transactions "
+        f"(user_id={user_id}, as_sender={as_sender}, is_admin={is_admin}, order={order}, "
+        f"limit={limit}, offset={offset}, date_from={date_from}, date_to={date_to}, contact_id={contact_id})"
+    )
+    return get_db().transactions.get_transactions(
+        user_id, as_sender=as_sender, is_admin=is_admin, order=order,
+        limit=limit, offset=offset, date_from=date_from, date_to=date_to, contact_id=contact_id
+    )
 
 def api_delete_transaction(transaction_id, user_id):
     logger.info(f"API call: api_delete_transaction (transaction_id={transaction_id}, user_id={user_id})")

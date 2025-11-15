@@ -1,3 +1,52 @@
+# MoneyMate
+
+A personal finance management application featuring a robust SQLite-based backend and a user-friendly Tkinter GUI.  
+It manages users, contacts, categories, expenses, and user-to-user transactions, providing visual insights through a dashboard.
+
+---
+
+## Key Features
+
+### Graphical User Interface (GUI)
+- **Dashboard**: Visual charts (powered by Matplotlib) showing expense distribution by category, spending trends over time, and transaction flow summaries.
+- **Expense Management**: Add, edit, remove, and filter expenses. Supports custom dates and categorization.
+- **Transaction Tracking**: Record debits/credits with contacts. Automatic calculation of legacy and net balances.
+- **Category Management**: Create and manage custom expense categories with descriptions.
+- **Contact Management**: Maintain an address book for easier transaction entry.
+- **Authentication**: Secure login/registration system with password hashing and audit logging.
+
+### Data Layer (Backend)
+- **Modular Architecture**: Separation of concerns with dedicated managers for Users, Contacts, Expenses, Transactions, and Categories.
+- **SQLite Database**: Automatic schema initialization, foreign key enforcement, and optimization indices.
+- **Unified API**: Standardized response format (`{"success", "error", "data"}`) for all data operations.
+- **Validation**: Strong application-level validation for all inputs (types, ranges, date formats).
+- **Thread-Safe Design**: Singleton database manager pattern to support concurrent GUI access.
+
+---
+
+## Installation & Usage
+
+### Prerequisites
+- Python 3.9+
+- `pip`
+
+### Installation
+
+1. **Clone the repository:**
+   ```bash
+   git clone [https://github.com/unibo-dtm-se-2025-MoneyMate/artifact.git](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact.git)
+   cd artifact
+2. **Install dependencies:**
+   ```bash
+   pip install -r requirements.txt
+
+### Running the application
+    python -m MoneyMate
+
+### Prerequisites
+- New Users: Click "Register" to create a new account.
+- Admin Access: For academic/testing purposes, an admin account can be registered by setting the role to 'admin' (requires password "12345").
+
 # MoneyMate - Data Layer
 
 A modular, validated, and fully tested Python data layer for a simple personal finance app.  
@@ -70,34 +119,77 @@ Notes:
 
 ```
 <root directory>
-├── MoneyMate/
+├── .github/
+│   └── workflows/                   
+├── MoneyMate/                        # Main Python package
 │   ├── __init__.py
-│   ├── __main__.py
-│   └── data_layer/
+│   ├── __main__.py                  
+│   ├── data_layer/                   # Backend (DB, managers, validation, API)
+│   │   ├── __init__.py
+│   │   ├── api.py                    # Thread-safe facade; returns {"success","error","data"}
+│   │   ├── categories.py
+│   │   ├── contacts.py
+│   │   ├── database.py               # SQLite connection + schema initialization
+│   │   ├── expenses.py
+│   │   ├── logging_config.py
+│   │   ├── manager.py                # DatabaseManager singleton, orchestrates managers
+│   │   ├── transactions.py
+│   │   ├── usermanager.py            # Auth + password hashing + audit logging
+│   │   └── validation.py
+│   └── gui/                          # Tkinter GUI (frames/views)
 │       ├── __init__.py
-│       ├── api.py
-│       ├── categories.py
-│       ├── contacts.py
-│       ├── database.py
-│       ├── expenses.py
-│       ├── logging_config.py
-│       ├── manager.py
-│       ├── transactions.py
-│       ├── usermanager.py
-│       └── validation.py
-└── test/
-    └── data_layer/
-        ├── __init__.py
-        ├── test_api.py
-        ├── test_categories.py
-        ├── test_contacts.py
-        ├── test_database.py
-        ├── test_expenses.py
-        ├── test_logging.py
-        ├── test_manager.py
-        ├── test_transactions.py
-        ├── test_usermanager.py
-        └── test_validation.py
+│       ├── app.py                    # GUI controller and frame routing
+│       ├── categories_frame.py
+│       ├── charts_frame.py           # Matplotlib charts/dashboard
+│       ├── contacts_frame.py
+│       ├── expenses_frame.py
+│       ├── login_frame.py
+│       └── transactions_frame.py
+├── scripts/
+│   └── init_db.py                    # Initialize DB using SQL schema(s)
+├── sql/
+│   └── auth_schema.sql               # Auth/users schema (DDL)
+├── test/                            
+│   ├── __init__.py
+│   ├── data_layer/                   # Backend unit/integration tests
+│   │   ├── __init__.py
+│   │   ├── test_api.py
+│   │   ├── test_categories.py
+│   │   ├── test_contacts.py
+│   │   ├── test_database.py
+│   │   ├── test_expenses.py
+│   │   ├── test_logging.py
+│   │   ├── test_manager.py
+│   │   ├── test_transactions.py
+│   │   ├── test_usermanager.py
+│   │   └── test_validation.py
+│   ├── gui/                          # GUI tests (Tkinter/matplotlib fakes, fixtures)
+│   │   ├── __init__.py
+│   │   ├── conftest.py
+│   │   ├── test_categories_frame.py
+│   │   ├── test_charts_frame.py
+│   │   ├── test_contacts_frame.py
+│   │   ├── test_expenses_frame.py
+│   │   ├── test_login_frame.py
+│   │   └── test_transactions_frame.py
+│   └── unit/
+│       └── test_data_layer.py
+├── .gitignore
+├── .python-version                  
+├── CHANGELOG.md
+├── LICENSE
+├── MANIFEST.in
+├── README.md                       
+├── package-lock.json
+├── package.json                      
+├── populate_db.py                    # Demo data population script (used in README)
+├── pyproject.toml                    
+├── pytest.ini                       
+├── release.config.js
+├── renovate.json
+├── requirements-dev.txt              
+├── requirements.txt                 
+└── setup.py
 ```
 
 ---
@@ -348,7 +440,9 @@ Run:
 ```bash
 pytest test/data_layer/
 ```
-
+```bash
+pytest test/gui/
+```
 ---
 
 ## Software Engineering Principles Applied

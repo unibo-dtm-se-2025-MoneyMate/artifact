@@ -24,7 +24,6 @@ class UserManager:
         self.db_path = db_path
         self._db_manager = db_manager  # opzionale, utile per future necessità
 
-
     def dict_response(self, success: bool, error: Optional[str] = None, data: Any = None) -> Dict[str, Any]:
         """Returns a standardized dictionary for all API responses (MoneyMate convention)."""
         return {"success": success, "error": error, "data": data}
@@ -116,19 +115,11 @@ class UserManager:
             return self.dict_response(False, str(e))
 
     def logout_user(self, user_id: int, ip_address: Optional[str] = None, user_agent: Optional[str] = None) -> Dict[str, Any]:
-        """
-        Log user logout event in access_logs (best-effort).
-        Returns: dict {success, error, data}
-        """
         self._log_access(user_id=user_id, action="logout", ip_address=ip_address, user_agent=user_agent)
         logger.info(f"User logout logged for user_id {user_id}")
         return self.dict_response(True)
 
     def change_password(self, user_id: int, old_password: str, new_password: str) -> Dict[str, Any]:
-        """
-        Change password for a user, requires old password for confirmation.
-        Returns: dict {success, error, data}
-        """
         new_norm = new_password.strip() if isinstance(new_password, str) else new_password
         old_norm = old_password.strip() if isinstance(old_password, str) else old_password
         if not new_norm:
@@ -153,10 +144,6 @@ class UserManager:
             return self.dict_response(False, str(e))
 
     def reset_password(self, admin_user_id: int, target_user_id: int, new_password: str) -> Dict[str, Any]:
-        """
-        Reset password for another user (admin only).
-        Returns: dict {success, error, data}
-        """
         new_norm = new_password.strip() if isinstance(new_password, str) else new_password
         if not new_norm:
             logger.warning("New password required for password reset.")
@@ -180,10 +167,6 @@ class UserManager:
             return self.dict_response(False, str(e))
 
     def get_user_role(self, user_id: int) -> Dict[str, Any]:
-        """
-        Get the role of a user.
-        Returns: dict {success, error, data}
-        """
         try:
             with get_connection(self.db_path) as conn:
                 cursor = conn.cursor()
@@ -197,10 +180,6 @@ class UserManager:
             return self.dict_response(False, str(e))
 
     def set_user_role(self, admin_user_id: int, target_user_id: int, new_role: str) -> Dict[str, Any]:
-        """
-        Update the role of a user (admin only).
-        Returns: dict {success, error, data}
-        """
         allowed_roles = {"user", "admin"}
         if new_role not in allowed_roles:
             logger.warning(f"Attempted to set invalid role '{new_role}' for user_id {target_user_id}")
@@ -219,4 +198,42 @@ class UserManager:
             return self.dict_response(True)
         except Exception as e:
             logger.error(f"Error setting role for user_id {target_user_id}: {e}")
+            return self.dict_response(False, str(e))
+
+    # --- NEW METHODS FOR USER LOOKUP (Needed by api_get_user_by_username) ---
+
+    def get_user_by_username(self, username: str) -> Dict[str, Any]:
+        """
+        Return user record by exact username.
+        Envelope: {success, error, data: {id, username, role}|None}
+        """
+        username_norm = username.strip() if isinstance(username, str) else username
+        if not username_norm:
+            return self.dict_response(False, "Username is required")
+        try:
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, username, role FROM users WHERE username = ?", (username_norm,))
+                row = cursor.fetchone()
+            if not row:
+                return self.dict_response(False, "User not found")
+            return self.dict_response(True, data={"id": row[0], "username": row[1], "role": row[2]})
+        except Exception as e:
+            logger.error(f"Error in get_user_by_username({username_norm}): {e}")
+            return self.dict_response(False, str(e))
+
+    def list_users(self) -> Dict[str, Any]:
+        """
+        Return a list of all users (id, username, role).
+        Envelope: {success, error, data: [ {id, username, role}, ... ]}
+        """
+        try:
+            with get_connection(self.db_path) as conn:
+                cursor = conn.cursor()
+                cursor.execute("SELECT id, username, role FROM users ORDER BY id ASC")
+                rows = cursor.fetchall()
+            data = [{"id": r[0], "username": r[1], "role": r[2]} for r in rows]
+            return self.dict_response(True, data=data)
+        except Exception as e:
+            logger.error(f"Error listing users: {e}")
             return self.dict_response(False, str(e))

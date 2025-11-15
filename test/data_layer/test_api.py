@@ -103,7 +103,7 @@ def _get_admin_user(username="adminuser"):
     """
     return _ensure_user(username, "12345", role="admin")
 
-# --- Existing tests (UNCHANGED) ---
+# --- Existing tests (UNCHANGED in intent; updated calls to new API signature) ---
 
 def test_api_add_and_get_expense():
     """
@@ -142,16 +142,13 @@ def test_api_add_transaction_and_balance():
         res2 = api_login_user("apitestuser2", "pw")
     to_id = res2["data"]["user_id"]
 
-    # Add transaction from from_id to to_id
-    api_add_transaction(from_id, to_id, "credit", 50, "2025-08-19", "Loan")
-    api_add_transaction(from_id, to_id, "debit", 20, "2025-08-19", "Repayment")
+    # Add transactions using new signature (keywords)
+    api_add_transaction(from_user_id=from_id, to_user_id=to_id, type_="credit", amount=50, date="2025-08-19", description="Loan")
+    api_add_transaction(from_user_id=from_id, to_user_id=to_id, type_="debit", amount=20, date="2025-08-19", description="Repayment")
     saldo_sender = api_get_user_balance(from_id)
     saldo_receiver = api_get_user_balance(to_id)
     assert isinstance(saldo_sender, dict) and saldo_sender["success"]
     assert isinstance(saldo_receiver, dict) and saldo_receiver["success"]
-    # Both users now have +50 credit and +20 debit in their global balance logic!
-    # The function sums by user_id in either sender or receiver
-    # So both will have (credit=50, debit=20) => saldo=30
     assert saldo_sender["data"] == 30
     assert saldo_receiver["data"] == 30
 
@@ -166,7 +163,7 @@ def test_api_response_format():
         lambda: api_get_expenses(user_id),
         lambda: api_add_contact("TestFormat", user_id),
         lambda: api_get_contacts(user_id),
-        lambda: api_add_transaction(user_id, user_id, "credit", 5, "2025-08-19", "Salary"),
+        lambda: api_add_transaction(from_user_id=user_id, to_user_id=user_id, type_="credit", amount=5, date="2025-08-19", description="Salary"),
         lambda: api_get_user_balance(user_id),
         api_list_tables,
     ]
@@ -185,8 +182,6 @@ def test_api_add_expense_invalid():
     assert not res["success"]
     assert "title" in str(res["error"]).lower()
 
-# --- New tests added for admin/role features (do not replace existing ones) ---
-
 def test_api_admin_registration_and_transactions():
     """
     Admin registration (password must be '12345') and ability to view all transactions of all users.
@@ -197,8 +192,8 @@ def test_api_admin_registration_and_transactions():
     u2 = _ensure_user("apiu2", "pw", role="user")
 
     # Add transactions in both directions
-    api_add_transaction(u1, u2, "credit", 50, "2025-08-19", "Loan")
-    api_add_transaction(u2, u1, "debit", 20, "2025-08-19", "Repayment")
+    api_add_transaction(from_user_id=u1, to_user_id=u2, type_="credit", amount=50, date="2025-08-19", description="Loan")
+    api_add_transaction(from_user_id=u2, to_user_id=u1, type_="debit", amount=20, date="2025-08-19", description="Repayment")
 
     # Admin gets all transactions
     tr_all = api_get_transactions(admin_id, is_admin=True)
@@ -244,8 +239,6 @@ def test_api_add_expense_with_category_id():
     assert "category_id" in matches[0]
     assert matches[0]["category_id"] == cat_id
 
-# --- New tests for NET balance, health, and admin flag behavior ---
-
 def test_api_net_balance_and_breakdown():
     """
     Verify NET balance semantics and detailed breakdown:
@@ -262,8 +255,8 @@ def test_api_net_balance_and_breakdown():
     u2 = _ensure_user("net_user2", "pw")
 
     # Create transactions
-    api_add_transaction(u1, u2, "credit", 50, "2025-08-19", "Loan")
-    api_add_transaction(u1, u2, "debit", 20, "2025-08-19", "Repayment")
+    api_add_transaction(from_user_id=u1, to_user_id=u2, type_="credit", amount=50, date="2025-08-19", description="Loan")
+    api_add_transaction(from_user_id=u1, to_user_id=u2, type_="debit", amount=20, date="2025-08-19", description="Repayment")
 
     # NET balances
     net_u1 = api_get_user_net_balance(u1)
@@ -302,14 +295,13 @@ def test_api_get_transactions_received():
     u2 = _ensure_user("trx_recv_u2", "pw")
 
     # Two directions
-    api_add_transaction(u1, u2, "credit", 10, "2025-08-19", "U1->U2")
-    api_add_transaction(u2, u1, "debit", 5, "2025-08-19", "U2->U1")
+    api_add_transaction(from_user_id=u1, to_user_id=u2, type_="credit", amount=10, date="2025-08-19", description="U1->U2")
+    api_add_transaction(from_user_id=u2, to_user_id=u1, type_="debit", amount=5, date="2025-08-19", description="U2->U1")
 
     received = api_get_transactions(u1, as_sender=False)
     assert received["success"]
     assert len(received["data"]) >= 1
     assert all(t["to_user_id"] == u1 for t in received["data"])
-    # Ensure the sent transaction is not present
     assert all(t["description"] != "U1->U2" for t in received["data"])
 
 def test_api_non_admin_cannot_use_is_admin_flag():
@@ -321,10 +313,9 @@ def test_api_non_admin_cannot_use_is_admin_flag():
     u2 = _ensure_user("flag_user2", "pw")
 
     # Create transactions in both directions
-    api_add_transaction(u1, u2, "credit", 15, "2025-08-19", "u1->u2")
-    api_add_transaction(u2, u1, "debit", 7, "2025-08-19", "u2->u1")
+    api_add_transaction(from_user_id=u1, to_user_id=u2, type_="credit", amount=15, date="2025-08-19", description="u1->u2")
+    api_add_transaction(from_user_id=u2, to_user_id=u1, type_="debit", amount=7, date="2025-08-19", description="u2->u1")
 
-    # Try to use is_admin=True as a normal user
     res = api_get_transactions(u1, is_admin=True)
     assert isinstance(res, dict)
     assert not res["success"]
@@ -338,8 +329,6 @@ def test_api_health_returns_schema_version():
     assert isinstance(res, dict)
     assert res["success"]
     assert isinstance(res["data"], int)
-
-# --- New API tests: update and contact balance ---
 
 def test_api_update_expense_partial():
     """
@@ -373,7 +362,7 @@ def test_api_update_transaction_and_sender_only():
     receiver = _ensure_user("upd_trx_receiver_api", "pw")
 
     # Create a transaction
-    assert api_add_transaction(sender, receiver, "credit", 30, "2025-08-19", "init")["success"]
+    assert api_add_transaction(from_user_id=sender, to_user_id=receiver, type_="credit", amount=30, date="2025-08-19", description="init")["success"]
     tr = api_get_transactions(sender)["data"][0]
     tid = tr["id"]
 
@@ -406,8 +395,8 @@ def test_api_contact_balance_sender_perspective():
     contact_id = next(c["id"] for c in contacts["data"] if c["name"] == "CarloAPI")
 
     # Add transactions tied to that contact (sender -> receiver)
-    assert api_add_transaction(sender, receiver, "credit", 30, "2025-08-19", "loan", contact_id=contact_id)["success"]
-    assert api_add_transaction(sender, receiver, "debit", 10, "2025-08-19", "repay", contact_id=contact_id)["success"]
+    assert api_add_transaction(from_user_id=sender, to_user_id=receiver, type_="credit", amount=30, date="2025-08-19", description="loan", contact_id=contact_id)["success"]
+    assert api_add_transaction(from_user_id=sender, to_user_id=receiver, type_="debit", amount=10, date="2025-08-19", description="repay", contact_id=contact_id)["success"]
 
     bal = api_get_contact_balance(sender, contact_id)
     assert isinstance(bal, dict) and bal["success"]
