@@ -1,3 +1,10 @@
+## [1.1.3](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact/compare/1.1.2...1.1.3) (2025-11-16)
+
+
+### Bug Fixes
+
+* retry PyPI release ([003820e](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact/commit/003820ef5cdf5af2404705bd429d7d668288100b))
+
 ## [1.1.2](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact/compare/1.1.1...1.1.2) (2025-11-16)
 
 
