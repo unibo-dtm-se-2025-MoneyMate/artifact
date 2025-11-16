@@ -1,3 +1,11 @@
+## [1.1.2](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact/compare/1.1.1...1.1.2) (2025-11-16)
+
+
+### Bug Fixes
+
+* align deploy workflow with template for MoneyMate ([bf9285d](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact/commit/bf9285df9f310431876837e79a46d485a7691691))
+* **ci:** allow deploy workflow to write issues and pull requests ([80d59c4](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact/commit/80d59c48ec642f4c3cb879a0caec55b72fbaea75))
+
 ## [1.1.0](https://github.com/unibo-dtm-se-2025-MoneyMate/artifact/compare/1.0.1...1.1.0) (2025-11-16)
 
 
