@@ -1,57 +1,59 @@
-# MoneyMate
+# Python project template
 
-MoneyMate is a Python-based data layer and application toolkit for personal finance management. It provides a thread-safe, versioned SQLite backend with entity managers for users, categories, contacts, expenses, and transactions. It includes authentication with roles (user/admin), auditing of access events, deterministic listings with pagination and filtering, balance analytics, and structured logging. This repository also provide a Tkinter GUI (with matplotlib charts) built on the same backend.
+A simple template of a Python project, with a rigid file structure, and predisposition for unit testing and release on PyPi.
 
-## Overview
+## Relevant features
 
-MoneyMate offers a modular, testable data layer designed to be embedded in applications or used from scripts. Its architecture centers on:
-- A process-wide, thread-safe API manager wrapping a versioned SQLite database
-- Entity-specific managers handling CRUD with strict validation and consistent semantics
-- Deterministic listings to make UI and testing predictable
-- Optional GUI features (branch: gui), integrating with the same API layer
-- Packaging and CI/release automation to distribute wheels and source archives
+- All your project code into a single main package (`MoneyMate/`)
+- All your project tests into a single test package (`test/`)
+- Unit testing support via [`unittest`](https://docs.python.org/3/library/unittest.html)
+- Automatic testing on all branches via GitHub Actions
+- Semi-automatic versioning via Git
+- Packaging support via [`setuptools`](https://setuptools.pypa.io/en/latest/setuptools.html)
+- Automatic release on [PyPi](https://pypi.org/) via GitHub Actions
+- Docker image support via `Dockerfile`
+- Automatic release on [DockerHub](https://hub.docker.com/) via GitHub Actions
+- Support for semi-automatic development environment management via [Pyenv](https://github.com/pyenv/pyenv)
+- Automatic dependencies updates via [Renovate](https://docs.renovatebot.com/)
+- Automatic conversion of `TODO` comments into GitHub issues via the `alstr/todo-to-issue-action`
 
-## Features
-
-- Thread-safe API manager with safe database path switching
-- Authentication and roles
-  - User registration, login/logout
-  - Role management (user/admin)
-  - Admin registration policy (academic/testing only)
-- Auditing
-  - Best-effort access logs for login/logout, failed_login, password_change, password_reset
-- Deterministic listings and search
-  - Expenses/Transactions: ordered by date DESC, id DESC
-  - Contacts/Categories: ordered by name ASC
-  - Case-insensitive expense search by title/category
-- Pagination and filtering
-  - limit, offset for listings
-  - date_from, date_to for time-bounded queries
-- Categories and expenses semantics
-  - No hard DB foreign key on expenses.category_id
-  - Ownership enforced in application logic
-  - category_id preserved after category deletion (per tests/specs)
-- CRUD semantics
-  - Partial updates with patch-like behavior
-  - Idempotent deletes with explicit deleted counts
-- Balances and analytics
-  - Net balance calculation
-  - Per-contact balance summaries from sender perspective
-  - Detailed breakdowns for analytics
-- Database and schema
-  - Versioned schema baseline and non-destructive migration scaffold
-  - Constraints and indexes for integrity/performance
-  - sqlite3.Row factory, WAL + synchronous=NORMAL best-effort tuning
-- Logging and observability
-  - Structured, consistent logging across modules
-  - Root logging opt-in via MONEYMATE_CONFIGURE_LOGGING
-- Tests
-  - pytest-based test suite
+## Project structure 
 
 
-## Repository Structure
-
-Top-level:
+```text
+.
+├── src/
+│   └── moneymate/
+│       ├── __init__.py
+│       ├── __main__.py
+│       ├── cli.py
+│       ├── data/
+│       │   ├── __init__.py
+│       │   └── database.py
+│       ├── models/
+│       ├── services/
+│       ├── config/
+│       └── utils/
+├── MoneyMate/
+│   ├── __init__.py
+│   └── __main__.py
+├── tests/
+│   ├── unit/
+│   │   └── test_data_layer.py
+│   ├── integration/
+│   └── conftest.py
+├── sql/
+├── scripts/
+├── pyproject.toml
+├── README.md
+├── LICENSE
+├── CHANGELOG.md
+├── .github/
+│   └── workflows/
+│       ├── ci.yml
+│       └── release.yml
+├── renovate.json
+└── .gitignore
 ```
 artifact/
 ├─ MoneyMate/
