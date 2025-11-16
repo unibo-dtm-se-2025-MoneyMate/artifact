@@ -1,3 +1,18 @@
+"""
+Helper utilities for ensuring and migrating authentication-related schema.
+
+This module focuses on aligning an existing SQLite database with the minimal
+schema required by the authentication stack and tests:
+
+- Ensures the presence and shape of the users table (required columns).
+- Ensures sessions and access_logs tables, plus supporting indexes.
+- Optionally applies an external SQL script (sql/auth_schema.sql) if present.
+- Maintains a basic schema_version row for health checks.
+
+It is intentionally tolerant and non-destructive, designed for incremental
+migration of older or partially initialized databases.
+"""
+
 from __future__ import annotations
 
 import sqlite3

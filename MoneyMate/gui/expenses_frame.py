@@ -1,14 +1,18 @@
 """
-Expenses management screen.
+Tkinter frame for managing expenses in the MoneyMate GUI.
 
-Performance focuses:
-- Limit fetch size to prevent UI freeze when the list is very long.
-- Optional asynchronous loading (env MONEYMATE_ASYNC_GUI=1).
-- Chunked row insertion so the Tk event loop can breathe.
-- Optional synchronous insertion override for deterministic GUI tests (env MONEYMATE_SYNC_GUI=1).
+This screen provides UX:
 
-Summary:
-This screen lets you add, edit, view, filter and remove your spending entries.
+- Form to add and edit expenses (date, amount, category, description).
+- Category selection tied to the current user's categories.
+- Search/filter by text, with optional environment-driven limits and batching
+  to keep the UI responsive on large datasets.
+- Incremental insertion of table rows with diagnostic logging.
+- Clear-all operation to remove all of the user's expenses.
+
+Underlying operations use the data-layer API functions
+(api_add_expense, api_update_expense, api_get_expenses, api_search_expenses,
+ api_delete_expense, api_clear_expenses, api_get_categories).
 """
 
 import os

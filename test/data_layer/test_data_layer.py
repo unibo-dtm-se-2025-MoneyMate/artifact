@@ -1,3 +1,16 @@
+"""
+Legacy data layer wrapper tests.
+
+This module tests the compatibility wrapper DatabaseManager defined in
+test_manager.py (re-exported as data_layer.DatabaseManager), ensuring:
+
+- list_tables() exposes the expected core tables (expenses, contacts, transactions).
+- Legacy add/get/search/delete/clear flows for expenses and contacts work.
+- Transaction CRUD and contact balance calculations behave as expected.
+- Validation errors for expenses and transactions are localized and shaped
+  into the standard {success, error, data} response format.
+"""
+
 import pytest
 import os
 from data_layer import DatabaseManager

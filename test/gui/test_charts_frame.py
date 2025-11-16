@@ -1,17 +1,20 @@
+"""
+GUI tests for ChartsFrame (dashboard).
+
+This module exercises the dashboard behavior with various mocked scenarios:
+
+- User not logged in: placeholder message instead of charts.
+- No data: 'no data available' style fallback in the container.
+- Full data path using a fake matplotlib backend (no real plotting dependency).
+- Behavior when matplotlib imports fail (textual fallback, no crash).
+- Categories API failure: warning path while still rendering some content.
+
+Assertions focus on widget presence and robustness, not visual correctness.
+"""
+
 import pytest
 import tkinter as tk
 from unittest.mock import MagicMock
-
-# Copertura Charts:
-# - Utente non loggato (messaggio placeholder)
-# - Nessun dato disponibile (messaggio no data)
-# - Dati completi con mock di matplotlib (senza dipendenza reale)
-# - Backend matplotlib mancante (import fallisce)
-# - Errore categorie (API failure)
-#
-# Approccio:
-# - Si verifica che i widget vengano creati o che non ci siano eccezioni.
-# - Non si controlla l'estetica del grafico (fuori scope dei test automatici).
 
 def test_charts_user_not_logged_in(app, mock_api):
     """Utente non loggato -> container mostra messaggio di login richiesto."""

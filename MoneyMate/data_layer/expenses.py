@@ -1,3 +1,17 @@
+"""
+Expense management layer for the MoneyMate data model.
+
+This module defines ExpensesManager, which handles:
+
+- CRUD operations on the expenses table, scoped per user.
+- Validation of input fields (title, price, date, category) via validation.py.
+- Optional support for category_id foreign key, with schema autodetection.
+- Filtering and pagination (date range, ordering, limit/offset).
+- Normalized dict responses for use by DatabaseManager and the GUI.
+
+It focuses on data integrity and compatibility with evolving DB schemas.
+"""
+
 import sqlite3
 from datetime import datetime
 from typing import Optional, Any, Dict

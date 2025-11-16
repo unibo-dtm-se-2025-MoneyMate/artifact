@@ -1,32 +1,17 @@
 """
-API tests for MoneyMate data layer.
+End-to-end tests for the high-level MoneyMate data layer API.
 
-This test module verifies:
-- Expenses API: add and list expenses for a user
-- Contacts API: add and list contacts for a user
-- Transactions API:
-  - add transactions and compute legacy balance (credit - debit across both sides)
-  - list transactions sent vs received
-  - admin visibility of all transactions
-  - rejection when non-admin sets is_admin=True
-- Users API:
-  - register/login
-  - admin registration policy (admin password must be '12345')
-- Expenses with categories:
-  - add expense with valid category_id
-- Balance analytics:
-  - NET balance and detailed breakdown semantics
-- Update APIs:
-  - api_update_expense partial updates
-  - api_update_transaction partial updates (sender-only)
-- Contact balance:
-  - api_get_contact_balance returns credits_sent, debits_sent, net for a contact (sender perspective)
-- API contract:
-  - all endpoints return dicts with success/error/data
-- Health:
-  - api_health returns current schema version
-- Test hygiene:
-  - Windows-safe setup/teardown of a dedicated test database
+This module verifies that the api.py facade correctly wires into the
+DatabaseManager and underlying managers by covering:
+
+- Expenses: add/get, validation, categories (category_id), partial updates.
+- Contacts: add/get, per-user isolation, contact-balance aggregation.
+- Transactions: add/get, sent vs received filters, admin visibility vs
+  non-admin isolation, partial updates (sender-only), contact binding.
+- Users: registration, login, role/permissions (admin password policy).
+- Balance analytics: legacy balance, NET balance, and breakdown semantics.
+- API contract: every public function returns {success, error, data}.
+- Database health: schema version via api_health and clean test DB setup.
 """
 
 import os

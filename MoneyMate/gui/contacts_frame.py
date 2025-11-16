@@ -1,3 +1,16 @@
+"""
+Tkinter frame for managing contacts within the MoneyMate GUI.
+
+Features:
+- Simple form to add per-user contacts (names only).
+- Search box to filter contacts by name.
+- Treeview listing of all contacts for the logged-in user.
+- Removal of selected contacts, with feedback on ownership and existence.
+
+All operations are performed through the data-layer API
+(api_add_contact, api_get_contacts, api_delete_contact).
+"""
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 from MoneyMate.data_layer.api import api_add_contact, api_get_contacts, api_delete_contact

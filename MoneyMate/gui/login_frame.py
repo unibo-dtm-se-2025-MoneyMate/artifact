@@ -1,10 +1,17 @@
 """
-Login screen (only handles authentication).
+Login screen for the MoneyMate GUI.
 
-summary:
-You type username + password. If correct, we tell the main app you are logged in.
-There is a button to go to the account creation screen.
+This frame:
+
+- Presents username and password fields with a minimal, centered layout.
+- Calls the data-layer api_login_user to authenticate.
+- Notifies the main MoneyMateGUI on successful login, so it can update
+  user context and navigation.
+- Provides a button to navigate to the registration screen.
+
+The frame is also responsible for clearing its fields when refreshed.
 """
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 from MoneyMate.data_layer.api import api_login_user

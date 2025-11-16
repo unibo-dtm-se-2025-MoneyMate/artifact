@@ -1,24 +1,18 @@
 """
-Wrapper di compatibilità per i test.
+Compatibility wrapper tests for DatabaseManager.
 
-Prima questa directory `test/data_layer/` definiva un proprio DatabaseManager
-(scollegato da MoneyMate.data_layer.manager), causando:
-  - AttributeError su metodi introdotti nel refactor
-  - Formati risposta incoerenti (mancavano chiavi success/error/data)
-  - Validazioni non applicate
+This file defines a thin subclass/wrapper over MoneyMate.data_layer.manager
+to preserve the legacy test interface, then tests that:
 
-Ora re-esportiamo la vera classe del package applicando un piccolo adapter
-per mantenere la firma usata nei test originali.
+- Legacy signatures (e.g., add_expense(description, price, date, category))
+  map correctly to the real DatabaseManager methods.
+- list_tables() is normalized to a simple list of core tables so tests
+  can rely on set(db.list_tables()).
+- search_expenses, get_expenses, and clear_expenses work with zero-arg
+  signatures used by older tests.
 
-I test chiamano ad esempio:
-    db.add_expense("", 20.0, "2025-08-19", "Food")
-che intendiamo mappare su:
-    RealDatabaseManager.add_expense(description, price, date, category)
-
-Inoltre i test iterano su list_tables facendo:
-    set(db.list_tables()) == {"expenses","contacts","transactions"}
-
-Quindi nel wrapper normalizziamo l'output di list_tables in una semplice lista.
+It ensures the refactored manager remains drop-in compatible with pre-existing
+test expectations.
 """
 
 from MoneyMate.data_layer.manager import DatabaseManager as _RealDatabaseManager

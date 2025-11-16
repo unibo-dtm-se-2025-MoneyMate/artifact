@@ -1,9 +1,16 @@
 """
-UserManager: User account management for MoneyMate Data Layer.
+High-level user management for the MoneyMate data layer.
 
-This class handles user registration, authentication, password management, and role support.
-Maintains separation between authentication and business logic.
-Follows best practices for modularity, dependency injection, configurability, error handling, and resource management.
+UserManager encapsulates operations on the users table and related
+access_logs, including:
+
+- User registration with hashed passwords and simple admin registration rules.
+- Authentication (username + password) and access logging (login/fail/logout).
+- Password changes and admin-driven password resets.
+- Role management (user/admin) with privilege checks.
+- Lookup helpers used by the unified API (get_user_by_username, list_users).
+
+All methods return dict envelopes compatible with the MoneyMate API and GUI.
 """
 
 from typing import Any, Dict, Optional

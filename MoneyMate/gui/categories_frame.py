@@ -1,3 +1,16 @@
+"""
+Tkinter frame for managing expense categories in the GUI.
+
+Responsibilities:
+- Display a form for adding new categories (name + optional description).
+- Show the current user's categories in a Treeview table.
+- Allow removal of the selected category without affecting existing expenses.
+- Interact with the data layer via api_add_category, api_get_categories,
+  and api_delete_category.
+
+The frame is plugged into MoneyMateGUI and refreshed per logged-in user.
+"""
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 from MoneyMate.data_layer.api import api_add_category, api_get_categories, api_delete_category

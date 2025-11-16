@@ -1,3 +1,18 @@
+"""
+Core SQLite schema and connection utilities for MoneyMate.
+
+This module is the central place for:
+
+- Creating and configuring SQLite connections (foreign keys, row factory).
+- Initializing and migrating the MoneyMate database schema:
+  users, contacts, expenses, transactions, categories, notes, attachments,
+  access_logs, and schema_version.
+- Performing non-destructive migrations to keep older DBs compatible.
+- Exposing helpers to query schema_version and list user tables.
+
+It is used by DatabaseManager and by higher-level modules that need a DB path.
+"""
+
 import sqlite3
 from typing import Dict, Any, Optional
 

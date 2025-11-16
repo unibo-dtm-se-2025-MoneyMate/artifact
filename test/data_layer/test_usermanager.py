@@ -1,17 +1,14 @@
 """
-Unit tests for UserManager (MoneyMate Data Layer).
+UserManager unit tests.
 
-This test file covers:
-- Successful user registration
-- Duplicate username registration (should fail)
-- Successful user authentication
-- Failed authentication (wrong password)
-- Response format (success, error, data fields)
-- Admin registration and forced password
-- Role logic: user/admin/upgrade
-- Change and reset password (role check)
-- Access logs auditing for login, failed_login, password_change, password_reset, logout
-- Additional edge cases: invalid role assignment, role query for non-existent user
+This module focuses on the user management layer exposed via DatabaseManager:
+
+- Registration and login for normal users, including duplicate detection.
+- Admin registration with a forced password ("12345") and role retrieval.
+- Changing and resetting passwords with proper admin role checks.
+- Access_logs auditing for login, failed_login, password_change,
+  password_reset, and logout events.
+- Robustness around invalid roles and querying roles for non-existent users.
 """
 
 import pytest

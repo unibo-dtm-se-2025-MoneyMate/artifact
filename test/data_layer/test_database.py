@@ -1,15 +1,15 @@
 """
-Database initialization and schema tests.
+Database schema and connection tests.
 
-This module covers:
-- init_db creates all core tables: users, contacts, expenses, transactions
-- extended schema presence: categories, notes, attachments, access_logs
-- get_connection returns a live connection (with FK ON)
-- users table contains role column (role-based logic)
-- expenses table contains optional category_id column (for FK to categories)
-- Test hygiene: module-level setup/teardown with Windows-safe cleanup
+These tests focus on the low-level database.py helpers, verifying that:
+
+- init_db creates all core tables (users, contacts, expenses, transactions).
+- Extended tables (categories, notes, attachments, access_logs) are present.
+- get_connection returns a usable SQLite connection with foreign keys enabled.
+- The users table includes a role column for role-based logic.
+- The expenses table includes an optional category_id column for FK linkage.
+- A temporary on-disk DB is created and cleaned up safely across platforms.
 """
-
 
 import os
 import gc

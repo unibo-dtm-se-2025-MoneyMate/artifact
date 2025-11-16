@@ -1,23 +1,15 @@
 """
-Pure validation tests (no DB involved).
+Pure validation tests (no database).
 
-This module covers:
-- validate_expense:
-  - multiple valid cases pass (returns None)
-  - missing title (empty/None) -> error mentioning 'title'
-  - missing non-title fields (date/category) -> error mentioning 'required'
-  - price edges: negative/zero -> error mentioning 'positive'
-  - non-numeric price -> error mentioning 'price'
-  - accepts numeric price as string (e.g., "12.50")
-  - whitespace-only title/category are rejected
-- validate_contact:
-  - empty/None/whitespace-only contact name -> error mentioning 'required'
-- validate_transaction:
-  - invalid type -> error mentioning 'type'
-  - type is case-insensitive and normalized
-  - non-positive amount -> error mentioning 'positive'
-  - non-numeric amount -> error mentioning 'amount'
-  - invalid or None date -> error mentioning 'date format'
+This file verifies the behavior of validation.py helpers:
+
+- validate_expense: multiple valid cases, missing title or other fields,
+  price edge cases, non-numeric price, and whitespace-only fields.
+- validate_contact: empty/None/whitespace-only names are rejected.
+- validate_transaction: invalid type, case-insensitive type matching,
+  non-positive or non-numeric amounts, and invalid date formats.
+
+Each test asserts that returned error messages mention the relevant field.
 """
 
 import pytest

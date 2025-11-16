@@ -1,11 +1,16 @@
-import pytest
+"""
+GUI tests for RegisterFrame.
 
-# Copertura RegisterFrame:
-# - Registrazione success
-# - Password troppo corta
-# - Errore API
-#
-# Notazione messaggi: substring case-insensitive.
+This module validates the registration screen behavior:
+
+- Successful registration: calls api_register_user, shows a success message,
+  and clears the password field.
+- Too-short password: client-side validation prevents API calls and shows
+  a length-related error.
+- API error (e.g., duplicate user): propagates an error message via messagebox.
+"""
+
+import pytest
 
 def test_registration_success(app, mock_api, mock_messagebox):
     """Registrazione utente valida -> success message e pulizia form."""

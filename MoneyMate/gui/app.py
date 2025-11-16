@@ -1,17 +1,18 @@
 """
-Main application bootstrap for the MoneyMate GUI.
+Main GUI bootstrap and application shell for MoneyMate.
 
-Responsibilities:
-- Initialize main window, visual theme, and shared style tokens.
-- Register all logical "frames" (pages) and switch between them.
-- Manage logged-in user context (user_id, username).
-- Provide sidebar navigation after successful login.
-- Safe refresh invocation: each frame can implement a .refresh() method.
+This module defines the MoneyMateGUI Tk root window, which:
 
-summary:
-Think of this file as the "remote control" for the whole interface.
-When you click buttons, we just tell another screen (a frame) to show itself.
+- Sets up the global look & feel (colors, fonts, ttk styles).
+- Initializes and registers all screen frames (login, register, expenses,
+  categories, contacts, transactions, charts).
+- Manages the logged-in user context (user_id, username).
+- Provides a sidebar-based navigation once the user is authenticated.
+- Wires GUI events to the data-layer API (login, logout, DB path setup).
+
+Use run_gui() (or python -m MoneyMate) to start the desktop application.
 """
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 import os

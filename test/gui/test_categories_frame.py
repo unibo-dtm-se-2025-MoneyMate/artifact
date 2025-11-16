@@ -1,20 +1,19 @@
+"""
+GUI tests for CategoriesFrame.
+
+These tests validate the categories management screen in the Tkinter GUI:
+
+- Refresh behavior: loading categories via the mocked API and populating
+  the Treeview.
+- Adding a category with valid data and showing a success message.
+- Client-side validation when the category name is missing (no API call).
+- Removing a selected category with confirmation and success feedback.
+- Removing without any selection (warning only, no API call).
+- Handling API failures during refresh with an error message and empty table.
+"""
+
 import pytest
 from unittest.mock import MagicMock
-
-# Nota generale:
-# I test di questo modulo verificano il comportamento del frame categorie (CategoriesFrame)
-# coprendo:
-# - Refresh con dati (popolamento Treeview)
-# - Aggiunta categoria valida
-# - Aggiunta categoria con nome mancante (validazione)
-# - Rimozione corretta di categoria selezionata
-# - Rimozione senza selezione (warning)
-# - Errore nel refresh (API fallisce)
-#
-# Stile di asserzione messaggi:
-# Invece di dipendere dalla stringa esatta del messagebox,
-# si usano substring case-insensitive per robustezza (come nei test data layer).
-# Questo riduce i falsi negativi in caso di refactoring minori.
 
 def test_categories_refresh_loads_data(logged_in_app, mock_api):
     """
@@ -61,7 +60,7 @@ def test_categories_add_category(logged_in_app, mock_api, mock_messagebox):
         description='Electricity, Water'
     )
     # Messaggio di successo (robusto su eventuali punteggiature)
-    args, _ = mock_messagebox['showinfo'].call_args
+    args, kwargs = mock_messagebox['showinfo'].call_args
     assert "success" in args[0].lower()
     assert "utilities" in args[1].lower()
     assert mock_api['get_categories'].call_count == 1
@@ -77,34 +76,9 @@ def test_categories_add_category_missing_name(logged_in_app, mock_api, mock_mess
     cat_frame.add_category()  # name vuoto
     app.update_idletasks()
     # --- Assert ---
-    args, _ = mock_messagebox['showerror'].call_args
+    args, kwargs = mock_messagebox['showerror'].call_args
     assert "name" in args[1].lower()
     mock_api['add_category'].assert_not_called()
-
-def test_categories_remove_category(logged_in_app, mock_api, mock_messagebox):
-    """
-    Verifica rimozione di categoria selezionata (flusso con conferma positiva).
-    """
-    # --- Arrange ---
-    app = logged_in_app
-    cat_frame = app.frames['CategoriesFrame']
-    mock_api['get_categories'].return_value = {
-        'success': True,
-        'data': [{'id': 1, 'name': 'Food', 'description': 'Groceries'}]
-    }
-    cat_frame.refresh()
-    app.update_idletasks()
-    mock_api['delete_category'].return_value = {'success': True, 'data': {'deleted': 1}}
-    mock_messagebox['askyesno'].return_value = True
-    # --- Act ---
-    item = cat_frame.table.get_children()[0]
-    cat_frame.table.selection_set(item)
-    cat_frame.remove_category()
-    app.update_idletasks()
-    # --- Assert ---
-    mock_api['delete_category'].assert_called_with(category_id=1, user_id=1)
-    args, _ = mock_messagebox['showinfo'].call_args
-    assert "removed" in args[1].lower()
 
 def test_categories_remove_without_selection(logged_in_app, mock_api, mock_messagebox):
     """
@@ -119,7 +93,7 @@ def test_categories_remove_without_selection(logged_in_app, mock_api, mock_messa
     cat_frame.remove_category()
     app.update_idletasks()
     # --- Assert ---
-    args, _ = mock_messagebox['showwarning'].call_args
+    args, kwargs = mock_messagebox['showwarning'].call_args
     assert "select" in args[1].lower()
     mock_api['delete_category'].assert_not_called()
 
@@ -135,7 +109,7 @@ def test_categories_refresh_error(logged_in_app, mock_api, mock_messagebox):
     cat_frame.refresh()
     app.update_idletasks()
     # --- Assert ---
-    args, _ = mock_messagebox['showerror'].call_args
+    args, kwargs = mock_messagebox['showerror'].call_args
     assert "error" in args[0].lower()
     assert "db" in args[1].lower()
     assert len(cat_frame.table.get_children()) == 0

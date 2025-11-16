@@ -1,18 +1,21 @@
+"""
+GUI tests for ExpensesFrame.
+
+This suite verifies the expenses management screen behavior with mocked APIs:
+
+- Refreshing populates the table from api_get_expenses and category choices.
+- Adding a valid expense validates inputs, calls api_add_expense, and shows
+  a success message.
+- Validation of missing fields, invalid date format, and invalid amount.
+- Updating an existing selected expense calls api_update_expense with
+  the correct parameters.
+- Removing without selection triggers a warning only.
+- Refresh with a search term uses api_search_expenses instead of get_expenses.
+- Handling API errors on refresh shows an error message and avoids populating rows.
+"""
+
 import pytest
 import tkinter as tk
-
-# Copertura:
-# - Refresh con lista di spese
-# - Add valido
-# - Add campi mancanti
-# - Add data invalida
-# - Add importo invalido (negativo/ non numerico)
-# - Update esistente
-# - Remove senza selezione (warning)
-# - Search con query
-# - Refresh error path
-#
-# Messaggi: uso substring per robustezza.
 
 def test_expenses_refresh_loads_data(logged_in_app, mock_api):
     """Refresh carica spese e popola tabella correttamente."""

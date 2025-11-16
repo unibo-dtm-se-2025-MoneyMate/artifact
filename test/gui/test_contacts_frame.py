@@ -1,15 +1,18 @@
+"""
+GUI tests for ContactsFrame.
+
+These tests cover the contacts management UI, ensuring:
+
+- Refresh loads and displays contacts from the mocked API.
+- Adding a valid contact triggers the API and shows a success message.
+- Empty-name validation prevents add_contact API calls and shows an error.
+- Client-side search filters the table by substring (case-insensitive).
+- Removing a selected contact with confirmation calls the delete API.
+- Removing without a selection results in a warning, no delete API call.
+"""
+
 import pytest
 from unittest.mock import MagicMock
-
-# Copertura:
-# - Refresh: popolamento dati
-# - Add valido
-# - Add nome vuoto (validazione)
-# - Filter (ricerca per substring)
-# - Remove valido
-# - Remove senza selezione
-#
-# Stile messaggi coerente con data layer (substring case-insensitive).
 
 def test_contacts_refresh_loads_data(logged_in_app, mock_api):
     """Refresh popola tabella con lista contatti."""

@@ -1,9 +1,16 @@
 """
-Separate registration screen.
+User registration screen for the MoneyMate GUI.
 
-summary:
-Here you pick a username and password to create a new account, then go back to log in.
+Responsibilities:
+- Collect a new username and password from the user.
+- Perform basic client-side checks (non-empty, minimum length).
+- Call api_register_user to create the account.
+- Show success/error messages and optionally return the user to the login
+  screen after successful registration.
+
+This frame is separate from LoginFrame to keep flows simple and focused.
 """
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 from MoneyMate.data_layer.api import api_register_user

@@ -1,12 +1,14 @@
 """
-Logging configuration for MoneyMate data layer.
+Shared logging configuration for the MoneyMate data layer.
 
-This file sets up structured logging for all manager modules.
-The logger is configured to output timestamp, log level, module name, and message.
+This module exposes get_logger(name), which returns a logger preconfigured
+with a simple console handler and a standard format:
 
-Note:
-- To reduce invasiveness in host applications, the root logger configuration
-  can be disabled by setting environment variable MONEYMATE_CONFIGURE_LOGGING=false.
+    timestamp - logger_name - level - message
+
+The intent is to have a non-invasive, centralized way to obtain loggers for
+all data-layer modules without forcing a specific global logging setup on
+embedding applications.
 """
 
 # data_layer/logging_config.py

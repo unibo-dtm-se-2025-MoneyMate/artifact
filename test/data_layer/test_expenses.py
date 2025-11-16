@@ -1,25 +1,16 @@
 """
-Expenses tests (Manager).
+Expenses manager tests.
 
-This module covers:
-- table presence: core + extended tables exist
-- add a valid expense and retrieve it
-- validation errors: empty title, negative price, invalid date format
-- non-numeric price is rejected with a clear 'price' error
-- search:
-  - filter by title keyword
-  - filter by category text (legacy field)
-  - results include category_id when present in schema
-- deletion:
-  - delete a single expense by id
-  - clear all expenses for a user
-- response contract: every call returns {success, error, data}
-- categories linkage:
-  - add with valid category_id (own category) succeeds
-  - add with category_id from another user fails
-- Test hygiene: per-test fixture with Windows-safe cleanup
+This module exercises the ExpensesManager via DatabaseManager to validate:
+
+- Presence of core and extended tables in the initialized schema.
+- Adding valid expenses and retrieving them per user.
+- Validation failures for missing title, invalid price/date, and non-numeric price.
+- Search by title and by legacy category text, including category_id propagation.
+- Deleting a single expense and clearing all expenses for a user.
+- Response contract ({success, error, data}) for all calls.
+- Category linkage rules for category_id (own vs other user's categories).
 """
-
 
 import sys
 import os

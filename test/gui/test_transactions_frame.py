@@ -1,17 +1,31 @@
+"""
+GUI tests for the TransactionsFrame.
+
+Covers the transactions screen behavior with mocked APIs and message boxes:
+
+- Refresh:
+  - "All": loads both sent and received transactions.
+  - "Sent"/"Received": use the correct as_sender flag.
+  - Text search: filters rows by substring.
+
+- Add transaction:
+  - Missing contact: validation error, no API call.
+  - Non-numeric amount: validation error, no API call.
+  - Valid add: calls api_add_transaction with from_user_id, contact_id and to_user_id=None.
+
+- Balance:
+  - Error from api_get_user_balance_breakdown -> label shows an error state.
+
+- Remove:
+  - No selection: warning only, no delete API call.
+
+- Error handling:
+  - Failure loading "sent" transactions shows an appropriate error message.
+"""
+
 import pytest
 import tkinter as tk
 from unittest.mock import call
-
-# Copertura aggiornata:
-# - Refresh all (sent+received)
-# - Filtri sent / received
-# - Ricerca testo
-# - Add transaction: contatto mancante, amount non numerico, inserimento valido
-# - Balance breakdown errore
-# - Remove senza selezione
-# - Errore caricamento sent
-#
-# Uso substring per messaggi.
 
 def test_transactions_refresh_all(logged_in_app, mock_api, mock_messagebox):
     """Refresh con filtro 'All': carica sent e received e popola correttamente."""

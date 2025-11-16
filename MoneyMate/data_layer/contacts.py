@@ -1,3 +1,18 @@
+"""
+Contact management layer for the MoneyMate data model.
+
+This module defines ContactsManager, which encapsulates operations on the
+contacts table and provides:
+
+- Per-user CRUD operations for contacts.
+- Validation of contact names via validation.py.
+- Ordering and simple filtering hooks (name-based).
+- Helper to check the existence of a contact for a given user.
+
+All methods return standard dict envelopes to integrate cleanly with
+DatabaseManager and the GUI API layer.
+"""
+
 import sqlite3
 from typing import Any, Optional, Dict
 from .database import get_connection

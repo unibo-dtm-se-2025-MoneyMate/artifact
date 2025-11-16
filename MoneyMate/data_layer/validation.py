@@ -1,3 +1,17 @@
+"""
+Validation helpers for MoneyMate domain entities.
+
+This module centralizes field-level validation for:
+
+- Expenses: title, price, date, and category semantics.
+- Contacts: required and non-empty names.
+- Transactions: type (debit/credit), amount, and date.
+
+Each validator returns either an error string describing the problem or None
+if the input is considered valid, enabling consistent error messages across
+managers and GUI layers.
+"""
+
 from datetime import datetime
 from typing import Optional, Any
 from .database import get_connection

@@ -1,3 +1,19 @@
+"""
+Dashboard frame for visualizing MoneyMate financial data using charts.
+
+This screen:
+
+- Loads expenses, categories, and user balance breakdown via the API layer.
+- Uses matplotlib to render:
+  - Expenses by category (pie chart).
+  - Expense trend over time (line chart).
+  - Transaction flow summary (bar chart).
+  - Net vs legacy balances (textual/graphical summary).
+- Embeds the resulting figure into Tkinter using the TkAgg backend.
+
+It is refreshed whenever the user navigates to the dashboard or logs in.
+"""
+
 import tkinter as tk
 from tkinter import ttk, messagebox
 from collections import defaultdict

@@ -1,9 +1,16 @@
 """
-Transactions management screen.
+Tkinter frame for managing person-to-person transactions in the GUI.
 
-Simplified UX:
-- No explicit recipient field: selected Contact drives counterparty resolution.
-- Balance shown is ALWAYS: (credits_received + credits_sent) - (debits_sent + debits_received)
+Key behaviors:
+- Uses a contact picker to determine the counterparty (no explicit user IDs).
+- Allows adding credit/debit transactions with date, amount, and description.
+- Provides filtering by text and direction (All/Sent/Received).
+- Displays transactions in a unified table, with derived direction and
+  human-readable counterparty labels.
+- Shows a dynamic total balance using api_get_user_balance_breakdown.
+- Allows removal of transactions that the current user has sent.
+
+All data operations go through the high-level MoneyMate data-layer API.
 """
 
 import tkinter as tk

@@ -1,3 +1,16 @@
+"""
+Authentication subsystem tests (stdlib unittest variant).
+
+This module exercises the low-level auth.py API using a single in-memory
+SQLite connection, covering:
+
+- User registration with email + password.
+- Login with session creation and verification via a token.
+- Logout semantics (session invalidation).
+- Lockout behavior after repeated failed logins.
+- Password change flow and re-authentication with the new password.
+"""
+
 import sqlite3
 import unittest
 from MoneyMate.data_layer.auth import (

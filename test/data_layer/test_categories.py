@@ -1,22 +1,15 @@
 """
-Categories tests (API and Manager).
+Categories integration tests (API + Manager).
 
-This module covers:
-- Categories (API):
-  - basic CRUD for a single user
-  - per-user uniqueness: duplicate name is rejected
-  - deletion and re-listing (empty state)
-  - invalid input: empty/None category name rejected
-- Categories x Expenses (Manager):
-  - expense can reference category_id that belongs to the same user
-  - expense cannot reference category_id owned by another user
-  - deleting a category does not remove existing expenses; historical category_id may remain
-- Cross-user behavior (Manager):
-  - same category name allowed for different users
-  - unauthorized delete attempt does not remove another user's category
-- Test hygiene: tmp_path-backed DBs to avoid file locking
+This module validates category behavior both through the public API facade
+and via the DatabaseManager directly:
+
+- API: per-user CRUD, duplicate-name protection, invalid name handling.
+- Manager: enforcing category_id ownership for expenses, preserving historical
+  category_id after deletion, and cross-user behavior (same name allowed,
+  unauthorized deletes are no-ops).
+- Schema-level expectations and cleanup via tmp_path-backed databases.
 """
-
 
 import os
 import pytest

@@ -1,3 +1,20 @@
+"""
+Central orchestrator and backward-compatible façade for the MoneyMate data layer.
+
+DatabaseManager coordinates all low-level managers (expenses, contacts,
+transactions, users, categories) and provides:
+
+- Initialization and re-initialization of the database and manager instances.
+- Resource cleanup and connection management (including in-memory keeper).
+- Legacy-style methods used by tests (add_expense, add_contact, etc.),
+  with input validation, localization of error messages, and normalization
+  to a standard {success, error, data} dict format.
+- A flexible list_tables() view that acts like both a list and a dict.
+
+This class is the primary entry point for non-GUI code that wants a single
+object to talk to the MoneyMate data layer.
+"""
+
 from typing import Any, Dict, Optional
 import sqlite3
 import sys

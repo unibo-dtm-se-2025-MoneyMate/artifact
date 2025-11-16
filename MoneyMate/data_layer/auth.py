@@ -1,3 +1,19 @@
+"""
+Low-level authentication and session management utilities.
+
+This module implements a standalone auth subsystem for SQLite-backed apps,
+including:
+
+- User account schema (users, sessions, login_attempts) and initializer.
+- Secure password hashing and verification using PBKDF2 (configurable via env).
+- Session token generation and verification (only hashes stored in DB).
+- Login attempt auditing with lockout after repeated failures.
+- Basic account operations such as registration, logout, and password change.
+
+It does not depend on the higher-level MoneyMate manager classes and can be
+used as an independent authentication layer for SQLite databases.
+"""
+
 import os
 import sqlite3
 import time

@@ -1,8 +1,15 @@
-# test/gui/conftest.py
-#
-# Nota: evitiamo di importare tkinter/MoneyMateGUI a livello modulo.
-# Patchiamo MoneyMate.data_layer.api.set_db_path PRIMA di importare MoneyMate.gui.app
-# così non crea un DB a import-time.
+"""
+Shared pytest fixtures and monkeypatch helpers for GUI tests.
+
+This conftest module:
+
+- Safely instantiates MoneyMateGUI by patching data_layer.api.set_db_path
+  before the GUI import, avoiding side-effect DB creation.
+- Provides an `app` fixture that skips cleanly when Tk/Tcl is unavailable.
+- Exposes `mock_api` to patch all API calls used by GUI frames with MagicMocks.
+- Exposes `mock_messagebox` to mock tkinter.messagebox dialogs.
+- Provides `logged_in_app` to put the GUI into a logged-in state for frame tests.
+"""
 
 import pytest
 from unittest.mock import MagicMock

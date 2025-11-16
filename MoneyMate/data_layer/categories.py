@@ -1,3 +1,16 @@
+"""
+Category management layer for the MoneyMate data model.
+
+This module defines CategoriesManager, a small ORM-like helper responsible for:
+
+- CRUD operations on the categories table (per-user categories).
+- Enforcing basic validation and uniqueness (name per user).
+- Supporting ordering and pagination for category listing.
+- Providing consistent dict-based responses compatible with DatabaseManager.
+
+It directly uses the shared SQLite connection helpers from database.py.
+"""
+
 from .database import get_connection
 from .database import get_connection
 from .manager import DatabaseManager # Ensure global logging configuration

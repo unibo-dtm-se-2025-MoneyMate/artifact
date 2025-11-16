@@ -1,12 +1,17 @@
+"""
+GUI tests for LoginFrame.
+
+These tests cover the login screen behavior:
+
+- Successful login: calls api_login_user and triggers the controller's
+  on_login_success callback with the returned user_id.
+- Failed login: shows an error message and leaves app.user_id unchanged.
+- Missing username/password: client-side validation prevents API calls and
+  shows a descriptive error.
+"""
+
 import pytest
 from unittest.mock import MagicMock
-
-# Copertura login:
-# - Login successo
-# - Login fallito (credenziali errate)
-# - Login campi mancanti
-#
-# Notazione messaggi: substring case-insensitive.
 
 def test_login_success(app, mock_api):
     """Login con credenziali corrette -> callback on_login_success chiamata."""

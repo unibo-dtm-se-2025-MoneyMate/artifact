@@ -1,16 +1,18 @@
 """
-api.py
-Unified API interface for MoneyMate data layer, using DatabaseManager.
+High-level API facade for the MoneyMate data layer.
 
-High-level API functions wrapping manager methods and returning dict envelopes:
-{success: bool, error: str|None, data: any}
+This module exposes a set of simple, dict-based functions that wrap the
+DatabaseManager and its managers (users, expenses, contacts, categories,
+transactions). Each public API returns a standard envelope:
 
-Features:
-- User registration/login/logout with roles.
-- Expenses, contacts, categories, transactions CRUD.
-- Optional category_id for expenses.
-- Pagination + ordering parameters (passed through if managers support them).
-- Helper APIs: user lookup, list users (if UserManager implements them).
+    {"success": bool, "error": str | None, "data": any}
+
+Responsibilities:
+- Maintain a singleton DatabaseManager instance, with thread-safe initialization.
+- Provide helpers to switch the underlying DB path (for GUI vs tests).
+- Offer user-facing operations: registration, login/logout, role management.
+- Offer CRUD operations for expenses, contacts, categories, and transactions.
+- Provide utility endpoints such as list_tables and health checks.
 """
 
 import threading

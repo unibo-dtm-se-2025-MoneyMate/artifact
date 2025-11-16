@@ -1,3 +1,18 @@
+"""
+Transaction management layer for the MoneyMate data model.
+
+This module defines TransactionsManager, responsible for:
+
+- CRUD operations on the transactions table with validation (type/amount/date).
+- Ensuring consistency of user and contact relationships.
+- Auto-resolving recipient users from contacts (virtual contact_* users).
+- Computing user balances and breakdowns:
+  - legacy balance, net balance, and per-contact balances.
+- Providing dict-based responses suitable for DatabaseManager and the GUI API.
+
+It is the core of the peer-to-peer debt/credit tracking logic in MoneyMate.
+"""
+
 import sqlite3
 from .database import get_connection
 from .validation import validate_transaction

@@ -1,13 +1,13 @@
 """
-Contacts tests (Manager).
+Contacts manager tests.
 
-This module covers:
-- add a valid contact for a user and retrieve it
-- validation: empty or None contact name rejected with error
-- delete a contact by id and verify the list is empty
-- Test hygiene: per-test fixture with Windows-safe cleanup
+These tests exercise the ContactsManager through DatabaseManager to ensure:
+
+- Adding a valid contact for a user and retrieving it.
+- Validation of empty/None contact names with clear error messages.
+- Deleting a contact by id and observing an empty list afterwards.
+- Proper per-test isolation and Windows-safe DB cleanup.
 """
-
 
 import sys
 import os
