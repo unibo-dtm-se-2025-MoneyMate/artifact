@@ -66,12 +66,12 @@ artifact/
 │  │  ├─ expenses.py           # CRUD, search, deterministic listing, pagination
 │  │  ├─ transactions.py       # CRUD, deterministic listing, pagination
 │  │  ├─ balances.py           # Net balance and per-contact summaries
-│  │  ├─ logging_utils.py      # Structured logging helpers (naming illustrative)
+│  │  ├─ logging_utils.py      # Structured logging helpers
 │  │  └─ utils.py              # Shared utilities, validators
 │  │
-│  └─ gui/                     # GUI components (present on the gui branch)
+│  └─ gui/                     
 │     ├─ __init__.py
-│     ├─ app.py                # GUI entry-point (naming illustrative)
+│     ├─ app.py                # GUI entry-point 
 │     └─ ...                   # Views, controllers, assets
 │
 ├─ tests/                      # test subdivided by category
