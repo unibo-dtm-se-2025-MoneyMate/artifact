@@ -49,7 +49,7 @@ jobs:
           pip install -r requirements-dev.txt
 
       - name: Test
-        run: python -m unittest discover -s test -t .
+        run: pytest
   deploy:
     needs:
       - test

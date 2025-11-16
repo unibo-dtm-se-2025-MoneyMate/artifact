@@ -1,0 +1,145 @@
+"""
+DatabaseManager: Central orchestrator for entity managers in MoneyMate.
+
+This class instantiates and exposes managers for expenses, contacts, transactions, and users,
+ensuring modularity, single responsibility, dependency injection, configurability, error handling, resource management, and testability.
+All data operations should be accessed through the appropriate manager instance.
+"""
+
+from typing import Any, Dict, Optional
+from .database import DB_PATH, list_tables, init_db
+import sqlite3
+from .logging_config import get_logger
+
+logger = get_logger(__name__)
+
+class DatabaseManager:
+    """
+    Central orchestrator for entity managers.
+    Provides a unified interface for all data operations.
+    """
+
+    def __init__(self, db_path: str = DB_PATH):
+        logger.info(f"Initializing DatabaseManager with db_path: {db_path}")
+        self.db_path: str = db_path
+        self._keeper: Optional[sqlite3.Connection] = None
+
+        if isinstance(db_path, str) and db_path.startswith("file:") and "mode=memory" in db_path:
+            try:
+                self._keeper = sqlite3.connect(db_path, uri=True, check_same_thread=False)
+                self._keeper.execute("PRAGMA foreign_keys = ON;")
+                logger.info("Keeper connection established for shared in-memory database.")
+            except Exception as e:
+                logger.warning(f"Failed to create keeper connection for in-memory DB: {e}")
+
+        init_db(db_path)
+
+        # Manager instances
+        from .expenses import ExpensesManager
+        from .contacts import ContactsManager
+        from .transactions import TransactionsManager
+        from .usermanager import UserManager
+        from .categories import CategoriesManager
+
+        self.expenses = ExpensesManager(db_path, db_manager=self)
+        self.contacts = ContactsManager(db_path)
+        self.transactions = TransactionsManager(db_path, self.contacts)
+        self.users = UserManager(db_path)
+        self.categories = CategoriesManager(db_path)
+
+    def __enter__(self) -> "DatabaseManager":
+        return self
+
+    def __exit__(self, exc_type, exc, tb) -> bool:
+        try:
+            self.close()
+        except Exception:
+            pass
+        return False
+
+    def close(self) -> None:
+        logger.info("Releasing all managers for test cleanup.")
+        self.expenses = None
+        self.contacts = None
+        self.transactions = None
+        self.users = None
+        self.categories = None
+        if getattr(self, "_keeper", None):
+            try:
+                self._keeper.close()
+            except Exception:
+                pass
+            finally:
+                self._keeper = None
+
+    def list_tables(self) -> Dict[str, Any]:
+        """
+        Wrap list_tables to always return a dict,
+        so tests expecting a dict don't fail.
+        """
+        logger.info(f"Listing tables for db_path: {self.db_path}")
+        return list_tables(self.db_path)  # ora ritorna già {"tables": [...]}
+
+    def set_db_path(self, db_path: str) -> None:
+        logger.info(f"Setting new db_path: {db_path} and re-initializing managers.")
+        if getattr(self, "_keeper", None):
+            try:
+                self._keeper.close()
+            except Exception:
+                pass
+            finally:
+                self._keeper = None
+
+        self.db_path = db_path
+
+        if isinstance(db_path, str) and db_path.startswith("file:") and "mode=memory" in db_path:
+            try:
+                self._keeper = sqlite3.connect(db_path, uri=True, check_same_thread=False)
+                self._keeper.execute("PRAGMA foreign_keys = ON;")
+                logger.info("Keeper connection established for shared in-memory database (after path change).")
+            except Exception as e:
+                logger.warning(f"Failed to create keeper connection for in-memory DB: {e}")
+
+        init_db(db_path)
+
+        # Ricrea i manager
+        from .expenses import ExpensesManager
+        from .contacts import ContactsManager
+        from .transactions import TransactionsManager
+        from .usermanager import UserManager
+        from .categories import CategoriesManager
+
+        self.expenses = ExpensesManager(db_path, db_manager=self)
+        self.contacts = ContactsManager(db_path)
+        self.transactions = TransactionsManager(db_path, self.contacts)
+        self.users = UserManager(db_path)
+        self.categories = CategoriesManager(db_path)
+
+    # ----------------------------
+    # Wrapper methods for convenience
+    # ----------------------------
+    def add_expense(self, *args, **kwargs):
+        return self.expenses.add_expense(*args, **kwargs)
+
+    def delete_expense(self, *args, **kwargs):
+        return self.expenses.delete_expense(*args, **kwargs)
+
+    def search_expenses(self, *args, **kwargs):
+        return self.expenses.search_expenses(*args, **kwargs)
+
+    def add_contact(self, *args, **kwargs):
+        return self.contacts.add_contact(*args, **kwargs)
+
+    def delete_contact(self, *args, **kwargs):
+        return self.contacts.delete_contact(*args, **kwargs)
+
+    def add_transaction(self, *args, **kwargs):
+        return self.transactions.add_transaction(*args, **kwargs)
+
+    def delete_transaction(self, *args, **kwargs):
+        return self.transactions.delete_transaction(*args, **kwargs)
+
+    def get_contact_balance(self, *args, **kwargs):
+        return self.transactions.get_contact_balance(*args, **kwargs)
+
+

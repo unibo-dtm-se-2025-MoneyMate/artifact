@@ -140,3 +140,21 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# MoneyMate: ignora i database SQLite locali
+MoneyMate/data/*.db
+MoneyMate/data/**/*.db
+*.sqlite
+*.sqlite3
+# File WAL/SHM/Journal di SQLite
+*.db-shm
+*.db-wal
+*.db-journal
+*.sqlite-shm
+*.sqlite-wal
+*.sqlite-journal
+*.db
+# Virtual env ignore
+.venv*/
+.venv39/
+venv/
