@@ -2,17 +2,23 @@ name: deploy
 on:
   workflow_call:
   workflow_dispatch:
+
 jobs:
   release:
     concurrency:
-      # Only one release job at a time. Strictly sequential.
       group: deploy
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
+      issues: write
+      pull-requests: write
+
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
         with:
-          fetch-depth: 0 # all history
+          fetch-depth: 0
 
       - name: Get All Tags
         run: git fetch --tags -f
@@ -45,8 +51,7 @@ jobs:
           npm install
           npx semantic-release
         env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GH_TOKEN }}
+          TWINE_USERNAME: ${{ secrets.PYPI_USERNAME }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_PASSWORD }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           RELEASE_DRY_RUN: ${{ contains(github.repository, 'template') }}
