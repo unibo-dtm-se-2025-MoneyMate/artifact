@@ -208,3 +208,75 @@ def test_search_includes_category_id_when_present(db):
     assert res["data"], "Expected at least one result"
     item = next(e for e in res["data"] if e["title"] == "Searchable")
     assert "category_id" in item and item["category_id"] == cat_id
+
+def test_update_expense_no_fields_to_update(db):
+    """
+    update_expense should fail with a clear message when no updatable fields are provided.
+    """
+    res = db.expenses.add_expense("ToUpdate", 10.0, "2025-08-19", "Food", db._test_user_id)
+    assert res["success"]
+    eid = db.expenses.get_expenses(db._test_user_id)["data"][0]["id"]
+
+    upd = db.expenses.update_expense(eid, db._test_user_id)
+    assert isinstance(upd, dict)
+    assert not upd["success"]
+    assert "no fields" in upd["error"].lower()
+
+
+def test_update_expense_invalid_price_and_date(db):
+    """
+    update_expense validates price and date format for partial updates.
+    """
+    res = db.expenses.add_expense("BadUpd", 10.0, "2025-08-19", "Food", db._test_user_id)
+    assert res["success"]
+    eid = db.expenses.get_expenses(db._test_user_id)["data"][0]["id"]
+
+    # Non-numeric price
+    upd_price = db.expenses.update_expense(eid, db._test_user_id, price="abc")
+    assert not upd_price["success"]
+    assert "price" in upd_price["error"].lower()
+
+    # Invalid date format
+    upd_date = db.expenses.update_expense(eid, db._test_user_id, date="19-08-2025")
+    assert not upd_date["success"]
+    assert "date format" in upd_date["error"].lower()
+
+
+def test_get_expenses_with_limit_and_offset(db):
+    """
+    get_expenses should honor limit and offset, returning a consistent slice.
+    """
+    db.expenses.add_expense("E1", 5.0, "2025-08-10", "Food", db._test_user_id)
+    db.expenses.add_expense("E2", 6.0, "2025-08-11", "Food", db._test_user_id)
+    db.expenses.add_expense("E3", 7.0, "2025-08-12", "Food", db._test_user_id)
+
+    # Order is date_desc by default: E3, E2, E1
+    first_two = db.expenses.get_expenses(db._test_user_id, limit=2)["data"]
+    assert len(first_two) == 2
+    titles_first_two = [e["title"] for e in first_two]
+    assert titles_first_two == ["E3", "E2"]
+
+    # Use offset 2 to fetch the third one
+    last_one = db.expenses.get_expenses(db._test_user_id, limit=2, offset=2)["data"]
+    assert len(last_one) == 1
+    assert last_one[0]["title"] == "E1"
+
+
+def test_search_expenses_with_date_range(db):
+    """
+    search_expenses should apply date_from/date_to filters when provided.
+    """
+    db.expenses.add_expense("Jan", 5.0, "2025-01-10", "Misc", db._test_user_id)
+    db.expenses.add_expense("Feb", 5.0, "2025-02-10", "Misc", db._test_user_id)
+    db.expenses.add_expense("Mar", 5.0, "2025-03-10", "Misc", db._test_user_id)
+
+    # Filter only February and later
+    res = db.expenses.search_expenses(
+        "Misc",
+        db._test_user_id,
+        date_from="2025-02-01",
+        date_to="2025-02-28",
+    )
+    assert res["success"]
+    titles = {e["title"] for e in res["data"]}
+    assert titles == {"Feb"}

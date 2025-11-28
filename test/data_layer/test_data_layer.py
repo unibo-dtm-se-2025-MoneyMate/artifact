@@ -156,4 +156,19 @@ def test_transaction_contact_id_invalid(db):
 def test_api_response_format(db):
     res = db.add_expense("A", 1, "2025-08-19", "Food")
     assert isinstance(res, dict)
-    assert "success" in res and "error" in res and "data" in res 
+    assert "success" in res and "error" in res and "data" in res
+
+def test_tables_exist_and_hybrid_access(db):
+    """
+    For the legacy DatabaseManager wrapper used in data_layer tests,
+    list_tables() must return a simple list of core tables
+    (expenses, contacts, transactions).
+    """
+    tables_view = db.list_tables()
+
+    # list_tables returns a plain list
+    assert isinstance(tables_view, list)
+
+    # Core tables must be present (order not important)
+    core = set(tables_view)
+    assert {"expenses", "contacts", "transactions"}.issubset(core)

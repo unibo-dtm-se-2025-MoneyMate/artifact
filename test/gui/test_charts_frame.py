@@ -176,3 +176,21 @@ def test_charts_categories_error(logged_in_app, mock_api):
     frame.refresh()
     # Il container viene comunque popolato con messaggi di fallback
     assert len(frame.charts_container.winfo_children()) >= 1
+
+def test_charts_expenses_api_failure(logged_in_app, mock_api):
+    """
+    Error from get_expenses should be handled gracefully:
+    charts_container should still be populated with some fallback widget(s).
+    """
+    app = logged_in_app
+    frame = app.frames['ChartsFrame']
+
+    mock_api['get_categories'].return_value = {'success': True, 'data': [{'id': 1, 'name': 'Food'}]}
+    mock_api['get_expenses'].return_value = {'success': False, 'error': 'DB error'}
+    mock_api['get_balance_breakdown_charts'].return_value = {'success': True, 'data': {}}
+
+    frame.refresh()
+
+    # We do NOT assume showerror is called here; implementation may just log.
+    # We only require that the container has at least one widget (fallback content).
+    assert len(frame.charts_container.winfo_children()) >= 1
