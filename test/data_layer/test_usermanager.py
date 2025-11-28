@@ -210,3 +210,81 @@ def test_user_role_invalid_and_role_query_nonexistent():
 
     db.close()
     gc.collect()
+
+def test_get_user_by_username_success_and_not_found():
+    """get_user_by_username should return user data on success and an error on not found."""
+    db = DatabaseManager(TEST_DB)
+    res = db.users.register_user("lookup_user", "pw")
+    assert res["success"]
+    uid = res["data"]["user_id"]
+
+    # Success case
+    ok = db.users.get_user_by_username("lookup_user")
+    assert ok["success"]
+    assert ok["data"]["id"] == uid
+    assert ok["data"]["username"] == "lookup_user"
+
+    # Not found
+    missing = db.users.get_user_by_username("missing_user")
+    assert not missing["success"]
+    assert "not found" in (missing["error"] or "").lower()
+
+    # Empty username -> validation error
+    empty = db.users.get_user_by_username("  ")
+    assert not empty["success"]
+    assert "username" in (empty["error"] or "").lower()
+
+    db.close()
+    gc.collect()
+
+
+def test_list_users_returns_all_users_in_order():
+    """list_users should return all registered users with id, username and role."""
+    db = DatabaseManager(TEST_DB)
+    # Ensure at least two users
+    u1 = db.users.register_user("list_u1", "pw")
+    if not u1["success"]:
+        u1 = db.users.login_user("list_u1", "pw")
+    u2 = db.users.register_user("list_u2", "pw")
+    if not u2["success"]:
+        u2 = db.users.login_user("list_u2", "pw")
+
+    res = db.users.list_users()
+    assert res["success"]
+    data = res["data"]
+    assert isinstance(data, list)
+    usernames = [u["username"] for u in data]
+    assert "list_u1" in usernames
+    assert "list_u2" in usernames
+
+    db.close()
+    gc.collect()
+
+
+def test_change_and_reset_password_validation_errors():
+    """
+    Exercise error branches in change_password and reset_password:
+    - empty new password
+    - reset by non-admin
+    """
+    db = DatabaseManager(TEST_DB)
+    # Admin + user
+    adm = db.users.register_user("adm_val", "12345", role="admin")
+    assert adm["success"]
+    admin_id = adm["data"]["user_id"]
+    usr = db.users.register_user("usr_val", "pw")
+    assert usr["success"]
+    user_id = usr["data"]["user_id"]
+
+    # Empty new password on change_password
+    bad_change = db.users.change_password(user_id, "pw", "   ")
+    assert not bad_change["success"]
+    assert "password" in (bad_change["error"] or "").lower()
+
+    # Non-admin trying to reset password
+    bad_reset = db.users.reset_password(user_id, admin_id, "newpw")
+    assert not bad_reset["success"]
+    assert "admin" in (bad_reset["error"] or "").lower()
+
+    db.close()
+    gc.collect()

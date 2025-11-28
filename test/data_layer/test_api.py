@@ -389,3 +389,50 @@ def test_api_contact_balance_sender_perspective():
     assert data["credits_sent"] == 30
     assert data["debits_sent"] == 10
     assert data["net"] == 20
+
+def test_api_get_user_by_username_and_list_users():
+    """
+    Cover api_get_user_by_username and api_list_users wrappers.
+    """
+    # Ensure a user exists
+    res = api_register_user("api_lookup_user", "pw")
+    if not res["success"]:
+        res = api_login_user("api_lookup_user", "pw")
+    uid = res["data"]["user_id"]
+
+    # get_user_by_username
+    from MoneyMate.data_layer.api import api_get_user_by_username, api_list_users
+
+    ok = api_get_user_by_username("api_lookup_user")
+    assert isinstance(ok, dict)
+    assert ok["success"]
+    assert ok["data"]["id"] == uid
+    assert ok["data"]["username"] == "api_lookup_user"
+
+    # list_users
+    lst = api_list_users()
+    assert isinstance(lst, dict)
+    assert lst["success"]
+    usernames = [u["username"] for u in (lst["data"] or [])]
+    assert "api_lookup_user" in usernames
+
+def test_api_get_user_by_username_when_users_manager_missing(monkeypatch):
+    """
+    api_get_user_by_username should return a clear error if the users manager
+    is not available on the DatabaseManager instance.
+    """
+    from MoneyMate.data_layer import api as api_module
+
+    class DummyDB:
+        users = None  # no users manager
+
+    monkeypatch.setattr(api_module, "_db", DummyDB())
+
+    from MoneyMate.data_layer.api import api_get_user_by_username
+    res = api_get_user_by_username("someone")
+    assert isinstance(res, dict)
+    assert not res["success"]
+    assert "manager not available" in (res["error"] or "").lower()
+
+    # Reset singleton to avoid polluting other tests
+    monkeypatch.setattr(api_module, "_db", None)

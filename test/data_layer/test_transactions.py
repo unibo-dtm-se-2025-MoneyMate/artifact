@@ -189,3 +189,154 @@ def test_net_balance_and_breakdown_manager(db):
     assert b2["debits_received"] == 20
     assert b2["net"] == 50
     assert b2["legacy"] == 30
+
+def test_update_transaction_invalid_type_and_amount(db):
+    """
+    update_transaction should validate type and amount for partial updates.
+    """
+    res = db.transactions.add_transaction(db._from_user_id, db._to_user_id, "credit", 10, "2025-08-19", "Init")
+    assert res["success"]
+    tid = db.transactions.get_transactions(db._from_user_id)["data"][0]["id"]
+
+    # Invalid type
+    upd_type = db.transactions.update_transaction(tid, db._from_user_id, type_="wrong")
+    assert not upd_type["success"]
+    assert "type" in upd_type["error"].lower()
+
+    # Non-numeric amount
+    upd_amount = db.transactions.update_transaction(tid, db._from_user_id, amount="abc")
+    assert not upd_amount["success"]
+    assert "amount" in upd_amount["error"].lower()
+
+    # Non-positive amount
+    upd_amount2 = db.transactions.update_transaction(tid, db._from_user_id, amount=0)
+    assert not upd_amount2["success"]
+    assert "positive" in upd_amount2["error"].lower()
+
+
+def test_get_transactions_with_date_range_and_contact_filter(db):
+    """
+    get_transactions should honor date_from/date_to and contact_id filters.
+    """
+    # Create a contact-bound transaction indirectly by using DatabaseManager-level flow
+    # We just insert a contact and refer to its id directly for this low-level test.
+    from MoneyMate.data_layer.database import get_connection
+
+    with get_connection(TEST_DB) as conn:
+        cur = conn.cursor()
+        cur.execute(
+            "INSERT INTO contacts (user_id, name) VALUES (?, ?)",
+            (db._from_user_id, "TestContact"),
+        )
+        contact_id = cur.lastrowid
+        conn.commit()
+
+    # Two transactions for same contact on different dates
+    db.transactions.add_transaction(
+        db._from_user_id, db._to_user_id, "credit", 10, "2025-01-10", "T1", contact_id=contact_id
+    )
+    db.transactions.add_transaction(
+        db._from_user_id, db._to_user_id, "credit", 20, "2025-03-10", "T2", contact_id=contact_id
+    )
+
+    # Filter to only February–February range → expect no results
+    feb = db.transactions.get_transactions(
+        db._from_user_id,
+        as_sender=True,
+        date_from="2025-02-01",
+        date_to="2025-02-28",
+        contact_id=contact_id,
+    )
+    assert feb["success"]
+    assert feb["data"] == []
+
+    # Filter to March only → expect T2
+    march = db.transactions.get_transactions(
+        db._from_user_id,
+        as_sender=True,
+        date_from="2025-03-01",
+        date_to="2025-03-31",
+        contact_id=contact_id,
+    )
+    assert march["success"]
+    assert len(march["data"]) == 1
+    assert march["data"][0]["description"] == "T2"
+
+def test_add_transaction_receiver_does_not_exist(db):
+    """
+    When to_user_id points to a non-existent user, add_transaction must fail
+    with a clear error, without inserting anything.
+    """
+    from MoneyMate.data_layer.database import get_connection
+
+    # Create a sender manually using the underlying DB to avoid auto user creation
+    with get_connection(TEST_DB) as conn:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO users (username, password_hash, role, is_active) VALUES (?,?,?,?)",
+                    ("tx_sender_raw", "", "user", 1))
+        sender_id = cur.lastrowid
+        conn.commit()
+
+    res = db.transactions.add_transaction(
+        from_user_id=sender_id,
+        to_user_id=999999,  # non-existent receiver
+        type_="credit",
+        amount=10,
+        date="2025-08-19",
+        description="bad",
+        contact_id=None,
+    )
+    assert not res["success"]
+    assert "receiver" in (res["error"] or "").lower()
+
+
+def test_add_transaction_same_sender_and_receiver(db):
+    """
+    add_transaction must reject transactions where sender and receiver are the same,
+    as enforced in the manager (and schema CHECK).
+    """
+    # Use an existing user from the fixture as both sender and receiver
+    uid = db._from_user_id
+    res = db.transactions.add_transaction(
+        from_user_id=uid,
+        to_user_id=uid,
+        type_="credit",
+        amount=10,
+        date="2025-08-19",
+        description="self",
+        contact_id=None,
+    )
+    assert not res["success"]
+    assert "sender" in (res["error"] or "").lower() or "receiver" in (res["error"] or "").lower()
+
+def test_get_transactions_admin_with_filters(db):
+    """
+    Admin listing with date and contact filters should respect is_admin=True
+    and return matching rows only.
+    """
+    from MoneyMate.data_layer.database import get_connection
+
+    # Create a contact for sender and get its id
+    with get_connection(TEST_DB) as conn:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO contacts (user_id, name) VALUES (?, ?)", (db._from_user_id, "AdminContact"))
+        contact_id = cur.lastrowid
+        conn.commit()
+
+    # Two transactions: one in Jan, one in March for that contact
+    db.transactions.add_transaction(db._from_user_id, db._to_user_id, "credit", 10, "2025-01-10", "Jan", contact_id=contact_id)
+    db.transactions.add_transaction(db._from_user_id, db._to_user_id, "credit", 20, "2025-03-10", "Mar", contact_id=contact_id)
+
+    # Admin filters to March only, with this contact_id
+    res = db.transactions.get_transactions(
+        user_id=db._admin_id,
+        is_admin=True,
+        as_sender=True,  # ignored for admin, but we pass it
+        contact_id=contact_id,
+        date_from="2025-03-01",
+        date_to="2025-03-31",
+    )
+    assert res["success"]
+    descs = [t["description"] for t in res["data"]]
+    assert "Mar" in descs
+    assert "Jan" not in descs

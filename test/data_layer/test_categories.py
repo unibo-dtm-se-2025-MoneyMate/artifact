@@ -204,3 +204,50 @@ def test_api_add_category_invalid_name(tmp_path):
         assert "name" in (res["error"] or "").lower()
 
     set_db_path(None)
+
+def test_categories_manager_duplicate_name_and_pagination(tmp_path):
+    """
+    CategoriesManager:
+    - rejects duplicate category names per user,
+    - supports order + limit/offset pagination.
+    """
+    from MoneyMate.data_layer.categories import CategoriesManager
+    from MoneyMate.data_layer.database import init_db, get_connection
+
+    db_file = tmp_path / "cats_mgr_pagination.db"
+    init_res = init_db(str(db_file))
+    assert init_res["success"]
+
+    # Create a user
+    with get_connection(str(db_file)) as conn:
+        cur = conn.cursor()
+        cur.execute("INSERT INTO users (username, password_hash, role) VALUES (?,?,?)",
+                    ("cat_user", "", "user"))
+        user_id = cur.lastrowid
+        conn.commit()
+
+    mgr = CategoriesManager(str(db_file))
+
+    # First category ok
+    ok = mgr.add_category(user_id, "CatA")
+    assert ok["success"]
+
+    # Duplicate name for same user -> fail with 'exists' style error
+    dup = mgr.add_category(user_id, "CatA")
+    assert not dup["success"]
+    assert "exist" in (dup["error"] or "").lower()
+
+    # Add more categories to check ordering and pagination
+    mgr.add_category(user_id, "CatB")
+    mgr.add_category(user_id, "CatC")
+
+    all_cats = mgr.get_categories(user_id, order="name_asc")
+    assert all_cats["success"]
+    names = [c["name"] for c in all_cats["data"]]
+    assert names == sorted(names)
+
+    # Pagination: limit 1, offset 1
+    page = mgr.get_categories(user_id, order="name_asc", limit=1, offset=1)
+    assert page["success"]
+    assert len(page["data"]) == 1
+    assert page["data"][0]["name"] == names[1]

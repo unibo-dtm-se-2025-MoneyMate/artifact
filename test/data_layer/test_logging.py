@@ -277,7 +277,7 @@ def test_api_logging(caplog):
 def test_get_logger_no_duplicate_handlers():
     """
     Ensure get_logger is idempotent w.r.t. adding handlers for the same logger name.
-    This covers the simple logging configuration helper and avoids handler duplication.
+    This covers the helper without assuming anything about the initial handler count.
     """
     if get_logger is None:
         pytest.skip("get_logger helper not available in MoneyMate.data_layer.logging_config")
@@ -285,13 +285,12 @@ def test_get_logger_no_duplicate_handlers():
     name = "MoneyMate.test_logger_dup"
     logger1 = get_logger(name)
     assert isinstance(logger1, logging.Logger), "get_logger must return a logging.Logger"
-    # capture handler count defensively (some frameworks manipulate handlers globally)
     hcount1 = len(list(logger1.handlers))
-    # calling again should not add new handlers
+
+    # Calling again should not add new handlers
     logger2 = get_logger(name)
     hcount2 = len(list(logger2.handlers))
     assert hcount1 == hcount2
-    # And the logger objects returned for the same name should be the same instance
     assert logger1 is logger2
 
 def test_api_register_and_list_tables_logging(caplog):

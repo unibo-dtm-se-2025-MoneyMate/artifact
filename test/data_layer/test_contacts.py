@@ -78,3 +78,24 @@ def test_delete_contact(db):
     assert isinstance(res, dict)
     assert res["success"]
     assert db.contacts.get_contacts(db._test_user_id)["data"] == []
+
+def test_contacts_manager_contact_exists_and_order(db):
+    """
+    ContactsManager.contact_exists should reflect the DB state, and get_contacts
+    should respect ordering by name ASC.
+    """
+    # Add three contacts with different names
+    db.contacts.add_contact("Charlie", db._test_user_id)
+    db.contacts.add_contact("Alice", db._test_user_id)
+    db.contacts.add_contact("Bob", db._test_user_id)
+
+    # Retrieve ordered list
+    res = db.contacts.get_contacts(db._test_user_id, order="name_asc")
+    assert res["success"]
+    names = [c["name"] for c in res["data"]]
+    assert names == ["Alice", "Bob", "Charlie"]
+
+    # contact_exists should be true for existing IDs, false for others
+    ids = [c["id"] for c in res["data"]]
+    assert db.contacts.contact_exists(ids[0], db._test_user_id)
+    assert not db.contacts.contact_exists(999999, db._test_user_id)
